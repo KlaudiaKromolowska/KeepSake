@@ -6,10 +6,12 @@
 // Safety: refuses to run against a non-local URL unless --allow-remote is passed.
 import { execSync } from "node:child_process";
 import {
+  afterCeilingHandoff,
   type CandidacyState,
   candidacyReduce,
   defaultsForEtiology,
   initialCandidacyState,
+  type ScheduleState,
   type SessionState,
   sessionReduce,
   startSession,
@@ -167,7 +169,12 @@ function endSession(
 function assertState(
   label: string,
   state: SessionState,
-  expect: { endReason: SessionState["endReason"]; startStreak: number; handoff: boolean },
+  expect: {
+    endReason: SessionState["endReason"];
+    startStreak: number;
+    handoff: boolean;
+    lastSuccessSec: number | null;
+  },
 ): void {
   if (state.endReason !== expect.endReason) {
     throw new Error(`${label}: expected endReason ${expect.endReason}, got ${state.endReason}`);
@@ -182,29 +189,42 @@ function assertState(
       `${label}: expected handoffToScheduler ${expect.handoff}, got ${state.handoffToScheduler}`,
     );
   }
+  // Exact equality, no tolerance — this is the anti-drift field: every rung traces to a real
+  // reducer output, so any float drift here means the arc no longer matches the engine.
+  if (state.progress.lastSuccessSec !== expect.lastSuccessSec) {
+    throw new Error(
+      `${label}: expected lastSuccessSec ${expect.lastSuccessSec}, got ${state.progress.lastSuccessSec}`,
+    );
+  }
   if (state.phase !== "ended")
     throw new Error(`${label}: session did not reach "ended" (${state.phase})`);
 }
 
 // --- driving the 5-day arc --------------------------------------------------------------------
 //
-// CONCERN (see report): the brief's illustrative rung numbers (15→30→60→120→240→480→960) assume
-// growthFactor 2. defaultsForEtiology("alzheimers") gives growthFactor 1.5, so real rungs are
-// 15, 22.5, 33.75, 50.625, 75.9375, 113.90625, 170.859375, 256.2890625, 384.43359375, ... — used
-// verbatim below rather than forced to match the illustrative doubling sequence.
+// Rungs (growthFactor 1.5 — defaultsForEtiology("alzheimers"), not the illustrative ×2 doubling):
+// r0=15 r1=22.5 r2=33.75 r3=50.625 r4=75.9375 r5=113.90625 r6=170.859375 r7=256.2890625
+// r8=384.43359375 r9=576.650390625 r10=864.9755859375 r11=960 (ceiling, maxIntervalSec).
 //
-// BIGGER CONCERN: reaching `isAtCeiling` (960s) via the trial ladder is mathematically unreachable
-// under DEFAULT_SR_CONFIG (maxIntervalSec 960, sessionSoftCapSec 1200) for any current etiology's
-// growthFactor — the wait immediately preceding a ceiling probe is always exactly 960s, leaving
-// only 240s of budget for everything else in that session, but climbing TO 960 requires a prior
-// rung >= 960/growthFactor (640s at 1.5×, 480s at 2×), both > 240s. Verified by executing the real
-// reducer (see report). So this seed does NOT force a scheduler handoff; day −1 ends via a normal
-// caregiver-paced win, still within-session (schedule_mode stays null) — the corrected arc.
+// commit e916a1e: the session soft cap (1200s) gates STARTING a new distractor gap, never
+// finishing one — `enterDistractor` checks `at - startedAt >= sessionSoftCapSec*1000` only at the
+// moment a new gap would begin. A gap already underway always gets its probe, however long it
+// runs. That makes the 960s ceiling reachable: climb close enough to it within one session that
+// the ceiling gap can still START before the 1200s mark, then let it run past the cap to
+// completion. Day −1 below does exactly that, driven by the real reducer — nothing hand-written.
+//
+// The climb across days −5..−2 is deliberately spread over multiple sessions so day −1 opens at
+// r10 (864.9755859375s) — one rung below ceiling. Several sessions end not via an explicit
+// caregiver `end_requested` but because the reducer itself declines to start the next gap (cap
+// already exceeded) and closes on the last (successful) trial — `enterDistractor` → `closeSession`.
+// That auto-close is the same "caregiver" endReason a manual close would produce; the arc leans on
+// it wherever the numbers naturally land there rather than forcing an earlier stop.
 
 interface Arc {
   candidacyTrials: TrialRecord[];
   sessions: Array<{ startedAt: number; endedAt: number; trials: TrialRecord[] }>;
   finalProgress: TargetProgress;
+  schedule: ScheduleState;
 }
 
 function driveArc(): Arc {
@@ -246,11 +266,16 @@ function driveArc(): Arc {
   ({ at: cursor, state: s1 } = wait(cursor, s1));
   ({ at: cursor, state: s1 } = probe(cursor, s1, "recall", li++)); // r2
   ({ at: cursor, state: s1 } = endSession(cursor, s1, li++));
-  assertState("session1", s1, { endReason: "caregiver", startStreak: 0, handoff: false });
+  assertState("session1", s1, {
+    endReason: "caregiver",
+    startStreak: 0,
+    handoff: false,
+    lastSuccessSec: 33.75, // r2
+  });
   const session1End = cursor;
 
   // Day −4: session 2 — start-probe recall (streak 1), one ladder miss + errorless correction,
-  // recovery, ends on a win.
+  // recovery, then climbs r3->r4. Ends on an explicit caregiver close (well under the soft cap).
   cursor = day(4);
   let s2 = startSession(s1.progress, { at: cursor, timeZone: PATIENT_TZ }, config);
   li = 0;
@@ -264,56 +289,86 @@ function driveArc(): Arc {
   ({ at: cursor, state: s2 } = probe(cursor, s2, "recall", li++)); // recover at r2
   ({ at: cursor, state: s2 } = wait(cursor, s2));
   ({ at: cursor, state: s2 } = probe(cursor, s2, "recall", li++)); // climb to r3
+  ({ at: cursor, state: s2 } = wait(cursor, s2));
+  ({ at: cursor, state: s2 } = probe(cursor, s2, "recall", li++)); // climb to r4
   ({ at: cursor, state: s2 } = endSession(cursor, s2, li++));
-  assertState("session2", s2, { endReason: "caregiver", startStreak: 1, handoff: false });
+  assertState("session2", s2, {
+    endReason: "caregiver",
+    startStreak: 1,
+    handoff: false,
+    lastSuccessSec: 75.9375, // r4
+  });
   const session2End = cursor;
 
-  // Day −3: session 3 — start-probe recall (streak 2), two climbs, ends on a win.
+  // Day −3: session 3 — start-probe recall (streak 2), climbs r5->r9. The r9 recall's own
+  // follow-up gap (r10, 864.9755859375s) can't START — cumulative elapsed already exceeds the
+  // 1200s soft cap at that point — so the reducer auto-closes on the last (successful) trial
+  // instead of an explicit end_requested. Same "caregiver" endReason a manual close would give.
   cursor = day(3);
   let s3 = startSession(s2.progress, { at: cursor, timeZone: PATIENT_TZ }, config);
   li = 0;
   ({ at: cursor, state: s3 } = probe(cursor, s3, "recall", li++)); // start probe -> streak 2
   ({ at: cursor, state: s3 } = wait(cursor, s3));
-  ({ at: cursor, state: s3 } = probe(cursor, s3, "recall", li++)); // reconfirm r3
-  ({ at: cursor, state: s3 } = wait(cursor, s3));
-  ({ at: cursor, state: s3 } = probe(cursor, s3, "recall", li++)); // climb r4
+  ({ at: cursor, state: s3 } = probe(cursor, s3, "recall", li++)); // reconfirm r4
   ({ at: cursor, state: s3 } = wait(cursor, s3));
   ({ at: cursor, state: s3 } = probe(cursor, s3, "recall", li++)); // climb r5
-  ({ at: cursor, state: s3 } = endSession(cursor, s3, li++));
-  assertState("session3", s3, { endReason: "caregiver", startStreak: 2, handoff: false });
+  ({ at: cursor, state: s3 } = wait(cursor, s3));
+  ({ at: cursor, state: s3 } = probe(cursor, s3, "recall", li++)); // climb r6
+  ({ at: cursor, state: s3 } = wait(cursor, s3));
+  ({ at: cursor, state: s3 } = probe(cursor, s3, "recall", li++)); // climb r7
+  ({ at: cursor, state: s3 } = wait(cursor, s3));
+  ({ at: cursor, state: s3 } = probe(cursor, s3, "recall", li++)); // climb r8
+  ({ at: cursor, state: s3 } = wait(cursor, s3));
+  ({ at: cursor, state: s3 } = probe(cursor, s3, "recall", li++)); // climb r9 -> auto-closes
+  assertState("session3", s3, {
+    endReason: "caregiver",
+    startStreak: 2,
+    handoff: false,
+    lastSuccessSec: 576.650390625, // r9
+  });
   const session3End = cursor;
 
-  // Day −2: session 4 — start-probe MISS (streak resets), errorless correction. The real reducer
-  // reverts a start-probe miss straight to lastSuccessSec (not an intermediate rung — the brief's
-  // "rebuild 240→480" doesn't match the engine; corrected below), then one climb, ends on a win.
+  // Day −2: session 4 — start-probe MISS (streak resets), errorless correction reverts to the
+  // last successful rung (r9), reconfirm r9, climb to r10. As in session 3, the follow-up gap
+  // (the 960s ceiling gap) can't start before the cap, so the reducer auto-closes on the r10
+  // recall — leaving day −1 to open at r10, one rung below ceiling.
   cursor = day(2);
   let s4 = startSession(s3.progress, { at: cursor, timeZone: PATIENT_TZ }, config);
   li = 0;
   ({ at: cursor, state: s4 } = probe(cursor, s4, "miss", li++)); // start probe MISS -> streak 0
   ({ at: cursor, state: s4 } = correct(cursor, s4, li++));
   ({ at: cursor, state: s4 } = wait(cursor, s4));
-  ({ at: cursor, state: s4 } = probe(cursor, s4, "recall", li++)); // reconfirm r5
+  ({ at: cursor, state: s4 } = probe(cursor, s4, "recall", li++)); // reconfirm r9
   ({ at: cursor, state: s4 } = wait(cursor, s4));
-  ({ at: cursor, state: s4 } = probe(cursor, s4, "recall", li++)); // climb r6
-  ({ at: cursor, state: s4 } = endSession(cursor, s4, li++));
-  assertState("session4", s4, { endReason: "caregiver", startStreak: 0, handoff: false });
+  ({ at: cursor, state: s4 } = probe(cursor, s4, "recall", li++)); // climb r10 -> auto-closes
+  assertState("session4", s4, {
+    endReason: "caregiver",
+    startStreak: 0,
+    handoff: false,
+    lastSuccessSec: 864.9755859375, // r10
+  });
   const session4End = cursor;
 
-  // Day −1: session 5 — start-probe recall (streak 1), two more climbs, ends on a win. Does NOT
-  // reach ceiling — see the file-level CONCERN comment above.
+  // Day −1: session 5 — start-probe recall (streak 1), reconfirm r10, then the ceiling gap (960s)
+  // starts comfortably under the cap (~869s elapsed) and runs to completion past it — a started
+  // wait always gets its probe. The ceiling recall ends the session via the scheduler handoff.
   cursor = day(1);
   let s5 = startSession(s4.progress, { at: cursor, timeZone: PATIENT_TZ }, config);
   li = 0;
   ({ at: cursor, state: s5 } = probe(cursor, s5, "recall", li++)); // start probe -> streak 1
   ({ at: cursor, state: s5 } = wait(cursor, s5));
-  ({ at: cursor, state: s5 } = probe(cursor, s5, "recall", li++)); // reconfirm r6
-  ({ at: cursor, state: s5 } = wait(cursor, s5));
-  ({ at: cursor, state: s5 } = probe(cursor, s5, "recall", li++)); // climb r7
-  ({ at: cursor, state: s5 } = wait(cursor, s5));
-  ({ at: cursor, state: s5 } = probe(cursor, s5, "recall", li++)); // climb r8
-  ({ at: cursor, state: s5 } = endSession(cursor, s5, li++));
-  assertState("session5", s5, { endReason: "caregiver", startStreak: 1, handoff: false });
+  ({ at: cursor, state: s5 } = probe(cursor, s5, "recall", li++)); // reconfirm r10
+  ({ at: cursor, state: s5 } = wait(cursor, s5)); // ceiling gap (960s) — starts < cap, runs past it
+  ({ at: cursor, state: s5 } = probe(cursor, s5, "recall", li++)); // recall at ceiling (r11=960)
+  assertState("session5", s5, {
+    endReason: "ceiling",
+    startStreak: 1,
+    handoff: true,
+    lastSuccessSec: 960, // r11 — ceiling
+  });
   const session5End = cursor;
+
+  const schedule = afterCeilingHandoff(session5End, config);
 
   return {
     candidacyTrials: candidacy.trials,
@@ -325,6 +380,7 @@ function driveArc(): Arc {
       { startedAt: day(1), endedAt: session5End, trials: s5.trials },
     ],
     finalProgress: s5.progress,
+    schedule,
   };
 }
 
@@ -449,6 +505,7 @@ async function seed(): Promise<void> {
   }
 
   const progress = arc.finalProgress;
+  const { schedule } = arc;
   const { error: targetStateErr } = await admin.from("target_state").insert({
     target_id: targetId,
     last_success_interval_sec: progress.lastSuccessSec,
@@ -457,12 +514,12 @@ async function seed(): Promise<void> {
     bad_sessions: progress.badSessions,
     mastered_at: progress.mastered ? now : null,
     session_count: progress.sessionCount,
-    // No scheduler handoff in this arc — see the CONCERN comment in driveArc(). schedule_* stays
-    // null ("still within-session only", per the target_state schema comment).
-    schedule_mode: null,
-    between_session_gap_days: null,
-    booster_step: null,
-    next_due_at: null,
+    // Day −1 reached the ceiling → scheduler handoff (afterCeilingHandoff, scheduler.ts). First
+    // between-mode entry for this target, so no prior ScheduleState to preserve.
+    schedule_mode: schedule.mode,
+    between_session_gap_days: schedule.gapDays,
+    booster_step: schedule.boosterStep,
+    next_due_at: new Date(schedule.nextDueAt).toISOString(),
   });
   if (targetStateErr) throw new Error(`target_state insert failed: ${targetStateErr.message}`);
 
@@ -488,6 +545,11 @@ async function printSummary(
   console.error("sessions:", sessions.count);
   console.error("trials:", trials.count);
   console.error("target_state:", JSON.stringify(targetState.data));
+  console.error(
+    "schedule:",
+    `mode=${targetState.data?.schedule_mode} gap_days=${targetState.data?.between_session_gap_days} ` +
+      `next_due_at=${targetState.data?.next_due_at}`,
+  );
 }
 
 const args = process.argv.slice(2);
