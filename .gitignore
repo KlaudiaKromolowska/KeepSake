@@ -42,6 +42,7 @@ Thumbs.db
 # Misc
 scratch/
 *.local
+.superpowers/
 
 # Vercel
 .vercel/
