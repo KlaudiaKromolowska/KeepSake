@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SR_CONFIG } from "./config";
+import { defaultsForEtiology } from "./etiology";
 import type { SessionState, TargetProgress } from "./session";
 import { canResume, resumeSession, sessionReduce, startSession } from "./session";
 import type { Outcome } from "./types";
@@ -377,9 +378,13 @@ describe("caregiver end (rule 8)", () => {
   });
 });
 
-describe("soft cap (rule 9)", () => {
-  it("a recall probe at the soft cap closes on ended after logging the success", () => {
-    // The distractor gap finishes sub-cap; the caregiver taps recall at the cap.
+// The cap gates STARTING a new distractor gap, never finishing one (PLAN §4.2 withinSessionBounds
+// at the loop top). A probe/wait allowed to run resolves normally; the cap only declines the *next*
+// gap. That makes the ceiling rung reachable — succeeding past-cap on the last gap hands off.
+describe("soft cap (rule 9) — cap gates a new gap, never finishes one", () => {
+  it("a recall past the cap at a non-ceiling rung blocks the next gap → ended/caregiver", () => {
+    // The distractor gap finishes sub-cap; the caregiver taps recall at the cap. The recall logs,
+    // but the *next* gap (30→60) is blocked, closing on the just-earned win.
     let s = openSession1(0);
     s = probe(s, "recall", 1000); // → distractor@30
     s = sessionReduce(frozen(s), { type: "wait_elapsed", at: SOFT_CAP_MS - 1000 }, config);
@@ -394,7 +399,9 @@ describe("soft cap (rule 9)", () => {
     expect(s.trials.at(-1)).toMatchObject({ outcome: "recall" });
   });
 
-  it("a miss probe at the soft cap routes through end_on_win", () => {
+  it("a miss past the cap resolves to correcting; the following correction_done blocks the gap", () => {
+    // The miss is not a new-gap start, so it resolves normally to correcting. The cap only bites
+    // when correction_done would re-enter distractor → end_on_win.
     let s = openSession1(0);
     s = sessionReduce(frozen(s), { type: "wait_elapsed", at: SOFT_CAP_MS - 1000 }, config);
     s = sessionReduce(
@@ -402,20 +409,23 @@ describe("soft cap (rule 9)", () => {
       { type: "probe_result", outcome: "miss", at: SOFT_CAP_MS },
       config,
     );
+    expect(s.phase).toBe("correcting");
+    expect(s.trials.at(-1)).toMatchObject({ outcome: "miss", corrected: true });
+    s = sessionReduce(frozen(s), { type: "correction_done", at: SOFT_CAP_MS }, config);
     expect(s.phase).toBe("end_on_win");
     expect(s.endReason).toBe("caregiver");
-    expect(s.trials.at(-1)).toMatchObject({ outcome: "miss", corrected: true });
   });
 
-  it("wait_elapsed at the soft cap after a success closes on ended", () => {
+  it("wait_elapsed landing past the cap is never swallowed → awaiting_probe", () => {
+    // A gap started sub-cap is always followed by its probe, even if the wait lands past the cap.
     let s = openSession1(0);
-    s = probe(s, "recall", 1000); // distractor@30, last trial recall
-    s = sessionReduce(frozen(s), { type: "wait_elapsed", at: SOFT_CAP_MS }, config);
-    expect(s.phase).toBe("ended");
-    expect(s.endReason).toBe("caregiver");
+    s = probe(s, "recall", 1000); // distractor@30, gap started sub-cap
+    s = sessionReduce(frozen(s), { type: "wait_elapsed", at: SOFT_CAP_MS + 5000 }, config);
+    expect(s.phase).toBe("awaiting_probe");
+    expect(s.intervalSec).toBe(30);
   });
 
-  it("a below-cap unclear probe at the soft cap routes through end_on_win (addendum 2)", () => {
+  it("a below-cap unclear past the cap blocks its re-probe gap → end_on_win", () => {
     let s = openSession1(0);
     s = sessionReduce(frozen(s), { type: "wait_elapsed", at: SOFT_CAP_MS - 1000 }, config);
     s = sessionReduce(
@@ -428,13 +438,80 @@ describe("soft cap (rule 9)", () => {
     expect(s.trials.at(-1)).toMatchObject({ outcome: "unclear", corrected: false });
   });
 
-  it("wait_elapsed at the soft cap routes through end_on_win when the last trial was a below-cap unclear (addendum 2)", () => {
+  it("wait_elapsed past the cap after a below-cap unclear is still never swallowed → awaiting_probe", () => {
     let s = openSession1(0);
     s = probe(s, "recall", 1000); // → 30, last trial recall
     s = probe(s, "unclear", 2000); // below cap: back to distractor, last trial unclear/uncorrected
     expect(s.phase).toBe("distractor");
-    s = sessionReduce(frozen(s), { type: "wait_elapsed", at: SOFT_CAP_MS }, config);
-    expect(s.phase).toBe("end_on_win");
+    s = sessionReduce(frozen(s), { type: "wait_elapsed", at: SOFT_CAP_MS + 5000 }, config);
+    expect(s.phase).toBe("awaiting_probe");
+  });
+
+  it("the ceiling rung is reachable past the cap (growth 2): recall@960 → ceiling handoff", () => {
+    // start-probe recall opens at lastSuccess 480; recall grows to 960 (a gap started sub-cap);
+    // that gap's wait lands past the cap but is not swallowed; the recall at 960 hits the ceiling.
+    const started = startSession(
+      fresh({ sessionCount: 1, lastSuccessSec: 480 }),
+      { at: 0, timeZone: TZ },
+      config,
+    );
+    let s = sessionReduce(
+      frozen(started),
+      { type: "probe_result", outcome: "recall", at: 0 },
+      config,
+    );
+    expect(s.phase).toBe("distractor");
+    expect(s.intervalSec).toBe(480);
+    s = probe(s, "recall", 480_000); // gap 480 sub-cap; grows to 960
+    expect(s.phase).toBe("distractor");
+    expect(s.intervalSec).toBe(960);
+    // gap 960 started at 480s (< cap); its wait lands at ~1445s (past cap) but is not swallowed.
+    s = sessionReduce(frozen(s), { type: "wait_elapsed", at: 1_445_000 }, config);
+    expect(s.phase).toBe("awaiting_probe");
+    s = sessionReduce(
+      frozen(s),
+      { type: "probe_result", outcome: "recall", at: 1_445_000 },
+      config,
+    );
+    expect(s.phase).toBe("ended");
+    expect(s.endReason).toBe("ceiling");
+    expect(s.handoffToScheduler).toBe(true);
+    expect(s.progress.lastSuccessSec).toBe(960);
+  });
+
+  it("the ceiling rung is reachable past the cap (alzheimers, growth 1.5)", () => {
+    const alz = defaultsForEtiology("alzheimers").config;
+    // lastSuccess 640 → recall grows to min(640×1.5, 960) = 960; the next recall hits the ceiling.
+    const started = startSession(
+      fresh({ sessionCount: 1, lastSuccessSec: 640 }),
+      { at: 0, timeZone: TZ },
+      alz,
+    );
+    let s = sessionReduce(frozen(started), { type: "probe_result", outcome: "recall", at: 0 }, alz);
+    expect(s.intervalSec).toBe(640);
+    s = sessionReduce(frozen(s), { type: "wait_elapsed", at: 640_000 }, alz);
+    s = sessionReduce(frozen(s), { type: "probe_result", outcome: "recall", at: 640_000 }, alz);
+    expect(s.phase).toBe("distractor");
+    expect(s.intervalSec).toBe(960);
+    // gap 960 started at 640s (< cap); wait lands past cap, not swallowed; recall@960 → ceiling.
+    s = sessionReduce(frozen(s), { type: "wait_elapsed", at: 1_605_000 }, alz);
+    expect(s.phase).toBe("awaiting_probe");
+    s = sessionReduce(frozen(s), { type: "probe_result", outcome: "recall", at: 1_605_000 }, alz);
+    expect(s.phase).toBe("ended");
+    expect(s.endReason).toBe("ceiling");
+    expect(s.handoffToScheduler).toBe(true);
+    expect(s.progress.lastSuccessSec).toBe(960);
+  });
+
+  it("a correction_done past the cap declines the reverted gap → end_on_win", () => {
+    // Explicit isolation of the correction_done distractor-entry guard.
+    let s = openSession1(0);
+    s = probe(s, "recall", 1000); // → 30, lastSuccess 30
+    s = probe(s, "recall", 2000); // → 60, lastSuccess 60
+    s = probe(s, "miss", 3000); // 60 miss → correcting
+    expect(s.phase).toBe("correcting");
+    s = sessionReduce(frozen(s), { type: "correction_done", at: SOFT_CAP_MS }, config);
+    expect(s.phase).toBe("end_on_win"); // revert to 60 would start a new gap past cap
     expect(s.endReason).toBe("caregiver");
   });
 });
