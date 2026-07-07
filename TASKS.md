@@ -44,22 +44,24 @@
 
 **Pure reducer + injected clock; zero `Date.now()`/`setTimeout` in core (PLAN §8b). Tests first.**
 
-- [ ] **1.1** `packages/core/src/sr/` types + named config constants (BASE/MAX/GROWTH,
+- [x] **1.1** `packages/core/src/sr/` types + named config constants (BASE/MAX/GROWTH,
   BASE_MISSES_TO_END=2, BAD_SESSIONS_TO_RESCOPE=3, UNCLEAR_CAP=2, scheduler numbers §5).
-- [ ] **1.2** Failing tests encoding the **entire v4 spec** (§4/§5): candidacy pass/advance rules ·
+- [x] **1.2** Failing tests encoding the **entire v4 spec** (§4/§5): candidacy pass/advance rules ·
   ladder growth/reset-to-last-success · `unclear` = no correction, no movement, 2→miss ·
   MAX-ceiling handoff · end-on-win (consecutive, resets on success) · session-1 teach step ·
   distinct-day mastery (patient tz) · resume/discard · scheduler gaps + booster cadence ·
   etiology defaults.
-- [ ] **1.3** Implement reducers until green: `candidacy.ts`, `ladder.ts`, `session.ts`,
+- [x] **1.3** Implement reducers until green: `candidacy.ts`, `ladder.ts`, `session.ts`,
   `scheduler.ts`, `etiology.ts`.
-- [ ] **1.4** Property tests (fast-check): interval ∈ [BASE,MAX] · reset never below last-success ·
+- [x] **1.4** Property tests (fast-check): interval ∈ [BASE,MAX] · reset never below last-success ·
   mastery = exactly 3 distinct-day session-starts · `unclear` never moves the ladder · no illegal
-  transitions. Seeded RNG.
-- [ ] **1.5** `DEMO_SPEED` as injected time-scale at the orchestration boundary — scales the *wait*
+  transitions. Seeded RNG (seed 42, reach tripwires so properties can't go vacuous).
+- [x] **1.5** `DEMO_SPEED` as injected time-scale at the orchestration boundary — scales the *wait*
   only; **persisted `interval_sec` always real**. Test proves stored data is identical at 1× and 60×.
-- [ ] **Gate (D2 EOD): engine green, high coverage.** Miss → cut line 1 (candidacy → engine-only
-  seeded result; `unclear` UI → long-press; PL → scaffold-only).
+- [x] **Gate (D2 EOD): engine green, high coverage.** ✅ Done D1: 116 tests green (PR #2 merged),
+  purity grep-guard, session↔scheduler integration contract pinned in `scheduler.ts` doc block.
+  Engine⇄§8-schema drift notes for P2: `target_state` needs `last_start_success_day`,
+  `session_count`, gap in **days** (not hours), `mastered_at`.
 
 ## Phase 2 — Data & auth layer (Day 2, overlaps P1)
 
