@@ -4,6 +4,7 @@ export * from "./candidacy";
 export * from "./clock";
 export * from "./config";
 export * from "./dates";
+export * from "./demoSpeed";
 export * from "./etiology";
 export * from "./ladder";
 export * from "./scheduler";
