@@ -65,16 +65,27 @@
 
 ## Phase 2 — Data & auth layer (Day 2, overlaps P1)
 
-- [ ] **2.1** Migrations in-repo (§8 schema incl. `timezone`, `is_demo`, `is_screening`,
-  text+CHECK, FK indexes, `moddatetime`, hard-delete CASCADE, `audit_log`).
-- [ ] **2.2** **RLS on ALL tables** + cross-tenant denial test (two users, assert zero leakage).
-  *Done when:* the denial test is green in CI.
-- [ ] **2.3** TS typegen from DB + server-action pattern (`requireUser()` → `{data}|{error}`).
-- [ ] **2.4** Minimal auth (email magic link, single role) + `DEMO_MODE` seeded caregiver
-  auto-login (auth stays off the demo critical path). ✂️D4→hardcoded caregiver only.
-- [ ] **2.5** Seed script: Marta (tz, etiology, `is_demo`) + screened target ("granddaughter's
-  name" → "Lena") + photo + **pre-run trial history** for the chart (§16.2). ⛔
-- [ ] **2.6** TTS spike: pick voice strategy for product + demo pre-gen plan (decision D2, test D3).
+- [x] **2.1** Migrations in-repo (§8 schema incl. `timezone`, `is_demo`, `is_screening`,
+  text+CHECK, FK indexes, `moddatetime`, hard-delete CASCADE, `audit_log`). Engine-drift
+  corrections applied: gap in **days**, `mastered_at`, `last_start_success_day`, `session_count`.
+- [x] **2.2** **RLS on ALL tables** + cross-tenant denial test (two users, assert zero leakage).
+  *Done when:* the denial test is green in CI. ✅ 37 assertions incl. re-parenting attacks +
+  positive controls + non-persistence proofs; adversarially security-reviewed; `rls` CI job.
+- [x] **2.3** TS typegen from DB + server-action pattern (`requireUser()` → `{data}|{error}` +
+  `failAction()` generic-error helper — raw DB errors never reach the client).
+- [x] **2.4** Minimal auth (email magic link, single role) + `DEMO_MODE` seeded caregiver
+  auto-login (auth stays off the demo critical path). ⚠️ Pre-pilot debt: `signInWithOtp`
+  auto-creates users — add `shouldCreateUser: false` + invite flow before any real pilot.
+- [x] **2.5** Seed script: Marta (tz, etiology, `is_demo`) + screened target ("granddaughter's
+  name" → "Lena") + photo-placeholder + **pre-run trial history** (5 days, engine-driven —
+  `pnpm seed`). ⛔ Photo asset itself = §16.2 (Phase 6).
+- [x] **2.6** TTS spike: decision in `docs/tts-decision.md` — Web Speech in-product (voice
+  heuristic, rate 0.9), edge-tts pre-gen for demo lines. Pre-gen test = D3 with Phase 3.
+- [ ] **⚠️ Engine debt (found by 2.5, deferred):** with alzheimers growth 1.5 (and any growth <4)
+  the 960s ceiling is unreachable inside the 1200s soft cap → the `"ceiling"` scheduler handoff
+  never fires. Decide: soft cap should gate *starting* a new interval, not *finishing* one
+  (PLAN §4.2 reading), or lower MAX/raise cap. Engine change + tests; revisit before Phase 3
+  wires the between-session line ("next check-in: tomorrow").
 
 ## Phase 3 — Session kiosk UI (Day 3) ⛔
 
