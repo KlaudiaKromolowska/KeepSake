@@ -32,3 +32,9 @@ Every table has RLS enabled; ownership is always resolved back up to `patients.c
 (direct on `patients`, joined for everything else). `audit_log` is insert-only for `authenticated`
 and unreadable by that role — reads are service-role only. Table-boundary tests (deny-path pgTAP)
 are Task 7, not this one.
+
+## Migration freeze rule
+
+Once these migrations have been pushed to the remote (EU) project they are **frozen** — never
+edit an applied migration in place again; add a new timestamped migration instead. (In-place
+edits were fine only while everything was local-only, pre-merge.)

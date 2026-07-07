@@ -408,6 +408,10 @@ async function findUserIdByEmail(admin: SupabaseClient, email: string): Promise<
 async function wipeExisting(admin: SupabaseClient, email: string): Promise<void> {
   const existingId = await findUserIdByEmail(admin, email);
   if (!existingId) return;
+  // audit_log has no FK by design (survives erasure), so the user-delete cascade can't reach
+  // it — wipe the demo user's rows explicitly to keep re-seeding truly idempotent.
+  const auditWipe = await admin.from("audit_log").delete().eq("caregiver_id", existingId);
+  if (auditWipe.error) throw new Error(`audit_log wipe failed: ${auditWipe.error.message}`);
   const { error } = await admin.auth.admin.deleteUser(existingId);
   if (error) throw new Error(`deleteUser failed: ${error.message}`);
 }

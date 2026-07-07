@@ -40,26 +40,30 @@ One row per target, mirroring the engine's persisted state exactly (`TargetProgr
 
 ## Example: one session, protocol-correct (fictional persona — Marta relearning "Lena")
 
-Traced directly against `sessionReduce()` in `session.ts`: session 1 (first-ever, so it opens with
-the 0s teach step, not a start-probe), interval escalates 15→30→60, a miss at 60s reverts to
-`last_success_interval_sec` (30 — never to zero, and not to base since 30 is the last successful
-rung), recovers, and the session closes on its final recall (sessions always end on a win — no
-extra padding trial is needed when the last logged trial is already a `recall`).
+Traced directly against `sessionReduce()` in `session.ts` with Marta's actual protocol config —
+her Alzheimer's etiology tunes the growth factor to **×1.5** (small error increments; early AD
+loses learning from large ones), so the rungs are 15 → 22.5 → 33.75, not a naive doubling.
+Session 1 (first-ever) opens with the 0s teach step, a miss at 33.75s reverts to
+`last_success_interval_sec` (22.5 — never to zero, and not to base since 22.5 is the last
+successful rung), recovers, and the session closes on its final recall (sessions always end on
+a win — no padding trial is needed when the last logged trial is already a `recall`).
 
 ```csv
 trial_id,session_id,target_id,interval_sec,outcome,is_screening,corrected,latency_ms,at
 t1,sess_2026-07-07_01,target_lena_name,0,recall,false,true,4100,2026-07-07T09:00:00+02:00
 t2,sess_2026-07-07_01,target_lena_name,15,recall,false,false,2300,2026-07-07T09:00:19+02:00
-t3,sess_2026-07-07_01,target_lena_name,30,recall,false,false,2600,2026-07-07T09:00:51+02:00
-t4,sess_2026-07-07_01,target_lena_name,60,miss,false,true,3900,2026-07-07T09:01:53+02:00
-t5,sess_2026-07-07_01,target_lena_name,30,recall,false,false,2100,2026-07-07T09:02:25+02:00
-t6,sess_2026-07-07_01,target_lena_name,60,recall,false,false,2400,2026-07-07T09:03:27+02:00
+t3,sess_2026-07-07_01,target_lena_name,22.5,recall,false,false,2600,2026-07-07T09:00:44+02:00
+t4,sess_2026-07-07_01,target_lena_name,33.75,miss,false,true,3900,2026-07-07T09:01:21+02:00
+t5,sess_2026-07-07_01,target_lena_name,22.5,recall,false,false,2100,2026-07-07T09:01:47+02:00
+t6,sess_2026-07-07_01,target_lena_name,33.75,recall,false,false,2400,2026-07-07T09:02:24+02:00
 ```
 Row `t1` is the teach step (`corrected=true`: the device modeled the answer). Rows `t2`, `t3` are
 clean expanding-interval successes. `t4` is the confirmed miss — `corrected=true` marks the
-device-delivered errorless correction; the *next* row's `interval_sec` (30, not 15 or 0) is the
+device-delivered errorless correction; the *next* row's `interval_sec` (22.5, not 15 or 0) is the
 reset-to-last-success rule, not a full reset. `t5`–`t6` show recovery back up the ladder; `t6` is
 the session's last trial and is a `recall`, so the session closes here — already ending on a win.
+(The fractional intervals are real: they fall out of the etiology-tuned ladder, and the seeded
+demo data — `pnpm seed` — contains exactly these rungs.)
 
 ## What becomes answerable at scale
 
