@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SR_CONFIG, type SrConfig } from "./config";
 import { calendarDayInTz } from "./dates";
 import { defaultsForEtiology } from "./etiology";
-import { resetIntervalSec } from "./ladder";
 import type { SessionEvent, SessionPhase, SessionState, TargetProgress } from "./session";
 import { sessionReduce, startSession } from "./session";
 import type { Outcome } from "./types";
@@ -126,6 +125,7 @@ describe("SR engine invariants (property-based, seed=42)", () => {
   //    (its re-probe legitimately sits in distractor at intervalSec 0).
   for (const { name, config } of ETIOLOGY_CONFIGS) {
     it(`1. interval stays within [0, max] and >= base on real rungs (${name})`, () => {
+      let realRungHits = 0;
       fc.assert(
         fc.property(progressArb(config), seqArb, (progress, events) => {
           for (const { next } of trace(progress, events, config)) {
@@ -135,12 +135,14 @@ describe("SR engine invariants (property-based, seed=42)", () => {
               (next.phase === "distractor" || next.phase === "awaiting_probe") &&
               !next.isStartProbe;
             if (onRealRung) {
+              realRungHits += 1;
               expect(next.intervalSec).toBeGreaterThanOrEqual(config.baseIntervalSec);
             }
           }
         }),
         { seed: SEED, numRuns: RUNS },
       );
+      expect(realRungHits).toBeGreaterThan(0);
     });
   }
 
@@ -148,36 +150,39 @@ describe("SR engine invariants (property-based, seed=42)", () => {
   //    lastSuccessSec ?? base.
   it("2. correction_done reverts to lastSuccessSec ?? base, never lower", () => {
     const config = DEFAULT_SR_CONFIG;
+    let correctingHits = 0;
     fc.assert(
       fc.property(progressArb(config), seqArb, (progress, events) => {
         for (const { next } of trace(progress, events, config)) {
           if (next.phase !== "correcting") continue;
+          correctingHits += 1;
           const after = sessionReduce(
             next,
             { type: "correction_done", at: next.startedAt },
             config,
           );
-          const expected = resetIntervalSec(next.progress.lastSuccessSec, config);
+          // Independently derived (not via resetIntervalSec) so this doesn't co-mutate with prod.
+          const expected = next.progress.lastSuccessSec ?? config.baseIntervalSec;
           expect(after.intervalSec).toBe(expected);
-          if (next.progress.lastSuccessSec !== null) {
-            expect(after.intervalSec).toBeGreaterThanOrEqual(next.progress.lastSuccessSec);
-          }
         }
       }),
       { seed: SEED, numRuns: RUNS },
     );
+    expect(correctingHits).toBeGreaterThanOrEqual(5);
   });
 
   // 3. A below-cap unclear never moves the ladder: intervalSec, lastSuccessSec, baseMisses and
   //    startStreak are untouched, and it never enters correction.
   it("3. a below-cap unclear leaves the ladder and streak untouched", () => {
     const config = DEFAULT_SR_CONFIG;
+    let freshHits = 0;
     fc.assert(
       fc.property(progressArb(config), seqArb, (progress, events) => {
         for (const { next } of trace(progress, events, config)) {
           const fresh =
             next.phase === "awaiting_probe" && !next.isStartProbe && next.unclearRun === 0;
           if (!fresh) continue;
+          freshHits += 1;
           const at = next.startedAt; // sub-soft-cap, so the unclear is a pure re-probe
           const after = sessionReduce(
             next,
@@ -193,6 +198,7 @@ describe("SR engine invariants (property-based, seed=42)", () => {
       }),
       { seed: SEED, numRuns: RUNS },
     );
+    expect(freshHits).toBeGreaterThan(0);
   });
 
   // 4. Mastery needs exactly masteryStreak distinct-day session-start recalls. Scripted
@@ -258,12 +264,14 @@ describe("SR engine invariants (property-based, seed=42)", () => {
   //    configs.
   for (const { name, config } of ETIOLOGY_CONFIGS) {
     it(`5. phase transitions stay within the legal edge set (${name})`, () => {
+      let strayNoOpHits = 0;
       fc.assert(
         fc.property(progressArb(config), seqArb, (progress, events) => {
           for (const { prev, next } of trace(progress, events, config)) {
             const from: SessionPhase = prev.phase;
             const to: SessionPhase = next.phase;
             if (from === to) {
+              strayNoOpHits += 1;
               expect(next).toBe(prev); // same-phase ⟹ genuine no-op (identical object)
             } else {
               expect(LEGAL_EDGES.has(`${from}->${to}`)).toBe(true);
@@ -272,22 +280,26 @@ describe("SR engine invariants (property-based, seed=42)", () => {
         }),
         { seed: SEED, numRuns: RUNS },
       );
+      expect(strayNoOpHits).toBeGreaterThan(0);
     });
   }
 
   // 6. Sessions always end on a win: any reached "ended" state with >= 1 trial has a recall last.
   it("6. an ended session with any trials ends on a recall", () => {
     const config = DEFAULT_SR_CONFIG;
+    let endedWithTrialsHits = 0;
     fc.assert(
       fc.property(progressArb(config), seqArb, (progress, events) => {
         for (const { next } of trace(progress, events, config)) {
           if (next.phase === "ended" && next.trials.length > 0) {
+            endedWithTrialsHits += 1;
             expect(next.trials.at(-1)?.outcome).toBe("recall");
           }
         }
       }),
       { seed: SEED, numRuns: RUNS },
     );
+    expect(endedWithTrialsHits).toBeGreaterThan(0);
   });
 
   // 7. Trial-log integrity: trials only ever append (prior entries are the same objects, never
