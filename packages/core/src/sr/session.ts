@@ -96,16 +96,24 @@ function trial(intervalSec: number, outcome: Outcome, corrected: boolean, at: nu
   return { intervalSec, outcome, corrected, isScreening: false, at };
 }
 
-/** Was the most recent logged probe a confirmed miss (direct, or an unclear run that converted)? */
-function lastOutcomeWasMiss(trials: readonly TrialRecord[]): boolean {
+/**
+ * True when the last logged trial was anything other than a recall — a confirmed miss, or an
+ * unclear (converted, or still below the unclear cap). A session may only close directly to
+ * "ended" on a last-trial recall, or with zero trials; any other last trial owes a win.
+ */
+function lastTrialNotRecall(trials: readonly TrialRecord[]): boolean {
   const last = trials[trials.length - 1];
-  if (!last) return false;
-  return last.outcome === "miss" || (last.outcome === "unclear" && last.corrected);
+  return last !== undefined && last.outcome !== "recall";
 }
 
-/** Close on a win when the last outcome was a miss, else end directly. Sessions never end on failure. */
+/**
+ * Single point of soft-cap / caregiver-close routing: closes on a win unless the last logged
+ * trial was a recall (or there were no trials at all). Sessions never end on failure — or on an
+ * ambiguous unclear. All soft-cap branches in `handleTrialProbe` delegate here so this routing
+ * rule lives in exactly one place.
+ */
 function closeSession(next: SessionState, endReason: "caregiver"): SessionState {
-  if (lastOutcomeWasMiss(next.trials)) return { ...next, phase: "end_on_win", endReason };
+  if (lastTrialNotRecall(next.trials)) return { ...next, phase: "end_on_win", endReason };
   return { ...next, phase: "ended", endReason };
 }
 
@@ -284,8 +292,9 @@ function handleTrialProbe(
         unclearRun,
         trials: [...state.trials, trial(intervalSec, "unclear", false, at)],
       };
-      // Unclear is neither success nor failure → a soft-cap close ends directly, no win owed.
-      if (softCap) return { ...next, phase: "ended", endReason: "caregiver" };
+      // Unclear is neither success nor failure, but it didn't move the ladder either — a
+      // soft-cap close here still owes a win (delegated to closeSession).
+      if (softCap) return closeSession(next, "caregiver");
       return { ...next, phase: "distractor" }; // re-probe the same rung
     }
     const next: SessionState = {
@@ -293,7 +302,7 @@ function handleTrialProbe(
       unclearRun: 0,
       trials: [...state.trials, trial(intervalSec, "unclear", true, at)],
     };
-    if (softCap) return { ...next, phase: "end_on_win", endReason: "caregiver" };
+    if (softCap) return closeSession(next, "caregiver");
     return { ...next, phase: "correcting" };
   }
 
@@ -308,7 +317,7 @@ function handleTrialProbe(
     if (isAtCeiling(intervalSec, config)) {
       return { ...next, phase: "ended", endReason: "ceiling", handoffToScheduler: true };
     }
-    if (softCap) return { ...next, phase: "ended", endReason: "caregiver" };
+    if (softCap) return closeSession(next, "caregiver");
     return { ...next, phase: "distractor", intervalSec: nextIntervalSec(intervalSec, config) };
   }
 
@@ -318,14 +327,14 @@ function handleTrialProbe(
     unclearRun: 0,
     trials: [...state.trials, trial(intervalSec, "miss", true, at)],
   };
-  if (softCap) return { ...next, phase: "end_on_win", endReason: "caregiver" };
+  if (softCap) return closeSession(next, "caregiver");
   return { ...next, phase: "correcting" };
 }
 
 function handleEndRequested(state: SessionState): SessionState {
   if (state.phase === "end_on_win") return state; // already closing on a win
-  // Mid-correction or last outcome a miss → still close on a win.
-  if (state.phase === "correcting" || lastOutcomeWasMiss(state.trials)) {
+  // Mid-correction, or the last logged trial wasn't a recall → still close on a win.
+  if (state.phase === "correcting" || lastTrialNotRecall(state.trials)) {
     return { ...state, phase: "end_on_win", endReason: "caregiver" };
   }
   return { ...state, phase: "ended", endReason: "caregiver" };

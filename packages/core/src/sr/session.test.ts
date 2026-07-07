@@ -358,6 +358,23 @@ describe("caregiver end (rule 8)", () => {
     expect(s.phase).toBe("ended");
     expect(s.endReason).toBe("caregiver");
   });
+
+  it("end after a trailing below-cap unclear routes through end_on_win (addendum 2)", () => {
+    let s = openSession1(0);
+    s = probe(s, "recall", 1000); // → 30, last trial recall
+    s = probe(s, "unclear", 2000); // below cap: unclearRun 1, corrected false, back to distractor
+    expect(s.trials.at(-1)).toMatchObject({ outcome: "unclear", corrected: false });
+    s = sessionReduce(frozen(s), { type: "end_requested", at: 3000 }, config);
+    expect(s.phase).toBe("end_on_win");
+    expect(s.endReason).toBe("caregiver");
+    const ended = sessionReduce(frozen(s), { type: "teach_done", at: 3000 }, config);
+    expect(ended.phase).toBe("ended");
+    expect(ended.trials.at(-1)).toMatchObject({
+      intervalSec: 0,
+      outcome: "recall",
+      corrected: true,
+    });
+  });
 });
 
 describe("soft cap (rule 9)", () => {
@@ -395,6 +412,29 @@ describe("soft cap (rule 9)", () => {
     s = probe(s, "recall", 1000); // distractor@30, last trial recall
     s = sessionReduce(frozen(s), { type: "wait_elapsed", at: SOFT_CAP_MS }, config);
     expect(s.phase).toBe("ended");
+    expect(s.endReason).toBe("caregiver");
+  });
+
+  it("a below-cap unclear probe at the soft cap routes through end_on_win (addendum 2)", () => {
+    let s = openSession1(0);
+    s = sessionReduce(frozen(s), { type: "wait_elapsed", at: SOFT_CAP_MS - 1000 }, config);
+    s = sessionReduce(
+      frozen(s),
+      { type: "probe_result", outcome: "unclear", at: SOFT_CAP_MS },
+      config,
+    );
+    expect(s.phase).toBe("end_on_win");
+    expect(s.endReason).toBe("caregiver");
+    expect(s.trials.at(-1)).toMatchObject({ outcome: "unclear", corrected: false });
+  });
+
+  it("wait_elapsed at the soft cap routes through end_on_win when the last trial was a below-cap unclear (addendum 2)", () => {
+    let s = openSession1(0);
+    s = probe(s, "recall", 1000); // → 30, last trial recall
+    s = probe(s, "unclear", 2000); // below cap: back to distractor, last trial unclear/uncorrected
+    expect(s.phase).toBe("distractor");
+    s = sessionReduce(frozen(s), { type: "wait_elapsed", at: SOFT_CAP_MS }, config);
+    expect(s.phase).toBe("end_on_win");
     expect(s.endReason).toBe("caregiver");
   });
 });
