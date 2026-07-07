@@ -1,0 +1,18 @@
+{
+  "name": "@keepsake/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./sr": "./src/sr/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "fast-check": "^4.5.0",
+    "typescript": "^5",
+    "vitest": "^4.0.0"
+  }
+}

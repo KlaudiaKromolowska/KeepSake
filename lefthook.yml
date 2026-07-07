@@ -1,0 +1,14 @@
+# Fast commits, thorough pushes (PLAN.md §8b).
+pre-commit:
+  parallel: true
+  jobs:
+    - name: biome
+      run: pnpm exec biome check --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+      glob: "*.{ts,tsx,js,json}"
+pre-push:
+  jobs:
+    - name: typecheck
+      run: pnpm typecheck
+    - name: test
+      run: pnpm test
