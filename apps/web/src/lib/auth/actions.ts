@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { ActionResult } from "@/lib/actions";
+import { failAction } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/server";
 
 const emailSchema = z.email();
@@ -18,7 +19,11 @@ export async function requestMagicLink(input: unknown): Promise<ActionResult<nul
   const { error } = await supabase.auth.signInWithOtp({ email: parsed.data });
 
   if (error) {
-    return { data: null, error: error.message };
+    return failAction(
+      "requestMagicLink failed",
+      error,
+      "Could not send the sign-in link. Please try again.",
+    );
   }
 
   return { data: null, error: null };
@@ -53,7 +58,7 @@ export async function demoSignIn(): Promise<ActionResult<null>> {
   });
 
   if (error) {
-    return { data: null, error: error.message };
+    return failAction("demoSignIn failed", error, "Could not sign in. Please try again.");
   }
 
   redirect("/dashboard");

@@ -1,7 +1,7 @@
 "use server";
 
 import type { ActionResult } from "@/lib/actions";
-import { requireUser } from "@/lib/actions";
+import { failAction, requireUser } from "@/lib/actions";
 import { createPatientSchema } from "@/lib/patients/schema";
 import type { Tables } from "@/lib/supabase/database.types";
 
@@ -34,7 +34,7 @@ export async function createPatient(input: unknown): Promise<ActionResult<Patien
     .single();
 
   if (error) {
-    return { data: null, error: error.message };
+    return failAction("createPatient failed", error, "Could not save. Please try again.");
   }
 
   return { data, error: null };
