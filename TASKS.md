@@ -81,11 +81,12 @@
   `pnpm seed`). ⛔ Photo asset itself = §16.2 (Phase 6).
 - [x] **2.6** TTS spike: decision in `docs/tts-decision.md` — Web Speech in-product (voice
   heuristic, rate 0.9), edge-tts pre-gen for demo lines. Pre-gen test = D3 with Phase 3.
-- [ ] **⚠️ Engine debt (found by 2.5, deferred):** with alzheimers growth 1.5 (and any growth <4)
-  the 960s ceiling is unreachable inside the 1200s soft cap → the `"ceiling"` scheduler handoff
-  never fires. Decide: soft cap should gate *starting* a new interval, not *finishing* one
-  (PLAN §4.2 reading), or lower MAX/raise cap. Engine change + tests; revisit before Phase 3
-  wires the between-session line ("next check-in: tomorrow").
+- [x] **⚠️ Engine debt (found by 2.5) — DECIDED & fixed pre-merge:** the soft cap gates
+  *starting* a new distractor interval, never *finishing* one (PLAN §4.2's own
+  `withinSessionBounds()`-at-loop-top reading; a started wait always gets its probe — intervals
+  are content timing, §8b). Makes the `"ceiling"` scheduler handoff reachable for every
+  etiology config. Worst-case session ≈ cap + one in-flight interval (~36 min); caregiver can
+  always end sooner.
 
 ## Phase 3 — Session kiosk UI (Day 3) ⛔
 
