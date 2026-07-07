@@ -36,6 +36,18 @@ describe("calendarDayInTz", () => {
     const epochMs = Date.parse("2026-03-29T12:00:00Z");
     expect(calendarDayInTz(epochMs, "Europe/Warsaw")).toBe("2026-03-29");
   });
+
+  it("resolves the correct local day just before the Europe/Warsaw spring-forward jump", () => {
+    // 2026-03-29T00:59:00Z = 2026-03-29T01:59:00+01:00 (CET, one minute before the 02:00 jump).
+    const epochMs = Date.parse("2026-03-29T00:59:00Z");
+    expect(calendarDayInTz(epochMs, "Europe/Warsaw")).toBe("2026-03-29");
+  });
+
+  it("resolves the correct local day just after the Europe/Warsaw spring-forward jump", () => {
+    // 2026-03-29T01:01:00Z = 2026-03-29T03:01:00+02:00 (CEST, one minute after clocks jump to 03:00).
+    const epochMs = Date.parse("2026-03-29T01:01:00Z");
+    expect(calendarDayInTz(epochMs, "Europe/Warsaw")).toBe("2026-03-29");
+  });
 });
 
 describe("isDistinctDay", () => {

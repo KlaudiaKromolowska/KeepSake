@@ -32,7 +32,7 @@ export interface SrConfig {
   candidacyAttemptsPerLevel: number;
 }
 
-export const DEFAULT_SR_CONFIG: SrConfig = {
+export const DEFAULT_SR_CONFIG = {
   baseIntervalSec: 15,
   maxIntervalSec: 960,
   growthFactor: 2,
@@ -49,4 +49,4 @@ export const DEFAULT_SR_CONFIG: SrConfig = {
   boosterCadenceDays: [7, 14, 30, 90],
   candidacyLevelsSec: [0, 15, 30],
   candidacyAttemptsPerLevel: 3,
-};
+} satisfies SrConfig;

@@ -13,7 +13,7 @@ describe("DEFAULT_SR_CONFIG", () => {
   it("has a strictly increasing booster cadence", () => {
     const cadence = DEFAULT_SR_CONFIG.boosterCadenceDays;
     for (let i = 1; i < cadence.length; i++) {
-      expect(cadence[i]).toBeGreaterThan(cadence[i - 1] as number);
+      expect(cadence[i] as number).toBeGreaterThan(cadence[i - 1] as number);
     }
   });
 
@@ -21,7 +21,7 @@ describe("DEFAULT_SR_CONFIG", () => {
     const levels = DEFAULT_SR_CONFIG.candidacyLevelsSec;
     expect(levels[0]).toBe(0);
     for (let i = 1; i < levels.length; i++) {
-      expect(levels[i]).toBeGreaterThan(levels[i - 1] as number);
+      expect(levels[i] as number).toBeGreaterThan(levels[i - 1] as number);
     }
   });
 
