@@ -8,8 +8,9 @@
   "scripts": {
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
-    "test": "pnpm --filter @keepsake/core test",
+    "test": "pnpm --filter @keepsake/core --filter web test",
     "test:rls": "pnpm --filter @keepsake/db-tests test",
+    "typegen": "supabase gen types typescript --local > apps/web/src/lib/supabase/database.types.ts",
     "typecheck": "pnpm -r exec tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write ."

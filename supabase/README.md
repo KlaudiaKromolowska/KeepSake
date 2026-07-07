@@ -7,8 +7,8 @@ the linked EU project (`enrhdnwazcwfccvqeoew`) is touched only via CI/deploy, no
 - `supabase db reset` — drop + recreate the local DB and re-apply every migration in
   `supabase/migrations/` from scratch. Run this after adding/editing a migration.
 - `supabase migration new <name>` — create a new timestamped migration file; never hand-name one.
-- `supabase gen types typescript --local > packages/core/src/db/types.ts` (adjust path when the
-  types package lands) — regenerate typed client bindings after a schema change.
+- `pnpm typegen` (= `supabase gen types typescript --local > apps/web/src/lib/supabase/database.types.ts`)
+  — regenerate typed client bindings after a schema change; commit the generated file.
 
 ## Engine ⇄ schema mapping (`target_state`)
 

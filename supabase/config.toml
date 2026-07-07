@@ -227,6 +227,14 @@ otp_expiry = 3600
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
 
+# Magic-link email — points at our own /auth/confirm route handler (token_hash + verifyOtp)
+# instead of GoTrue's built-in /verify endpoint, so our server code controls cookie-setting.
+# NOTE: config.toml auth email templates are only picked up on `supabase start`/`supabase stop`
+# + `supabase start` — restart the local stack to pick this up (safe: does not reset DB data).
+[auth.email.template.magic_link]
+subject = "Your Keepsake sign-in link"
+content_path = "./supabase/templates/magic_link.html"
+
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
 # enabled = true
