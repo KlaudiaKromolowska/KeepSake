@@ -44,35 +44,49 @@
 
 **Pure reducer + injected clock; zero `Date.now()`/`setTimeout` in core (PLAN §8b). Tests first.**
 
-- [ ] **1.1** `packages/core/src/sr/` types + named config constants (BASE/MAX/GROWTH,
+- [x] **1.1** `packages/core/src/sr/` types + named config constants (BASE/MAX/GROWTH,
   BASE_MISSES_TO_END=2, BAD_SESSIONS_TO_RESCOPE=3, UNCLEAR_CAP=2, scheduler numbers §5).
-- [ ] **1.2** Failing tests encoding the **entire v4 spec** (§4/§5): candidacy pass/advance rules ·
+- [x] **1.2** Failing tests encoding the **entire v4 spec** (§4/§5): candidacy pass/advance rules ·
   ladder growth/reset-to-last-success · `unclear` = no correction, no movement, 2→miss ·
   MAX-ceiling handoff · end-on-win (consecutive, resets on success) · session-1 teach step ·
   distinct-day mastery (patient tz) · resume/discard · scheduler gaps + booster cadence ·
   etiology defaults.
-- [ ] **1.3** Implement reducers until green: `candidacy.ts`, `ladder.ts`, `session.ts`,
+- [x] **1.3** Implement reducers until green: `candidacy.ts`, `ladder.ts`, `session.ts`,
   `scheduler.ts`, `etiology.ts`.
-- [ ] **1.4** Property tests (fast-check): interval ∈ [BASE,MAX] · reset never below last-success ·
+- [x] **1.4** Property tests (fast-check): interval ∈ [BASE,MAX] · reset never below last-success ·
   mastery = exactly 3 distinct-day session-starts · `unclear` never moves the ladder · no illegal
-  transitions. Seeded RNG.
-- [ ] **1.5** `DEMO_SPEED` as injected time-scale at the orchestration boundary — scales the *wait*
+  transitions. Seeded RNG (seed 42, reach tripwires so properties can't go vacuous).
+- [x] **1.5** `DEMO_SPEED` as injected time-scale at the orchestration boundary — scales the *wait*
   only; **persisted `interval_sec` always real**. Test proves stored data is identical at 1× and 60×.
-- [ ] **Gate (D2 EOD): engine green, high coverage.** Miss → cut line 1 (candidacy → engine-only
-  seeded result; `unclear` UI → long-press; PL → scaffold-only).
+- [x] **Gate (D2 EOD): engine green, high coverage.** ✅ Done D1: 116 tests green (PR #2 merged),
+  purity grep-guard, session↔scheduler integration contract pinned in `scheduler.ts` doc block.
+  Engine⇄§8-schema drift notes for P2: `target_state` needs `last_start_success_day`,
+  `session_count`, gap in **days** (not hours), `mastered_at`.
 
 ## Phase 2 — Data & auth layer (Day 2, overlaps P1)
 
-- [ ] **2.1** Migrations in-repo (§8 schema incl. `timezone`, `is_demo`, `is_screening`,
-  text+CHECK, FK indexes, `moddatetime`, hard-delete CASCADE, `audit_log`).
-- [ ] **2.2** **RLS on ALL tables** + cross-tenant denial test (two users, assert zero leakage).
-  *Done when:* the denial test is green in CI.
-- [ ] **2.3** TS typegen from DB + server-action pattern (`requireUser()` → `{data}|{error}`).
-- [ ] **2.4** Minimal auth (email magic link, single role) + `DEMO_MODE` seeded caregiver
-  auto-login (auth stays off the demo critical path). ✂️D4→hardcoded caregiver only.
-- [ ] **2.5** Seed script: Marta (tz, etiology, `is_demo`) + screened target ("granddaughter's
-  name" → "Lena") + photo + **pre-run trial history** for the chart (§16.2). ⛔
-- [ ] **2.6** TTS spike: pick voice strategy for product + demo pre-gen plan (decision D2, test D3).
+- [x] **2.1** Migrations in-repo (§8 schema incl. `timezone`, `is_demo`, `is_screening`,
+  text+CHECK, FK indexes, `moddatetime`, hard-delete CASCADE, `audit_log`). Engine-drift
+  corrections applied: gap in **days**, `mastered_at`, `last_start_success_day`, `session_count`.
+- [x] **2.2** **RLS on ALL tables** + cross-tenant denial test (two users, assert zero leakage).
+  *Done when:* the denial test is green in CI. ✅ 37 assertions incl. re-parenting attacks +
+  positive controls + non-persistence proofs; adversarially security-reviewed; `rls` CI job.
+- [x] **2.3** TS typegen from DB + server-action pattern (`requireUser()` → `{data}|{error}` +
+  `failAction()` generic-error helper — raw DB errors never reach the client).
+- [x] **2.4** Minimal auth (email magic link, single role) + `DEMO_MODE` seeded caregiver
+  auto-login (auth stays off the demo critical path). ⚠️ Pre-pilot debt: `signInWithOtp`
+  auto-creates users — add `shouldCreateUser: false` + invite flow before any real pilot.
+- [x] **2.5** Seed script: Marta (tz, etiology, `is_demo`) + screened target ("granddaughter's
+  name" → "Lena") + photo-placeholder + **pre-run trial history** (5 days, engine-driven —
+  `pnpm seed`). ⛔ Photo asset itself = §16.2 (Phase 6).
+- [x] **2.6** TTS spike: decision in `docs/tts-decision.md` — Web Speech in-product (voice
+  heuristic, rate 0.9), edge-tts pre-gen for demo lines. Pre-gen test = D3 with Phase 3.
+- [x] **⚠️ Engine debt (found by 2.5) — DECIDED & fixed pre-merge:** the soft cap gates
+  *starting* a new distractor interval, never *finishing* one (PLAN §4.2's own
+  `withinSessionBounds()`-at-loop-top reading; a started wait always gets its probe — intervals
+  are content timing, §8b). Makes the `"ceiling"` scheduler handoff reachable for every
+  etiology config. Worst-case session ≈ cap + one in-flight interval (~36 min); caregiver can
+  always end sooner.
 
 ## Phase 3 — Session kiosk UI (Day 3) ⛔
 

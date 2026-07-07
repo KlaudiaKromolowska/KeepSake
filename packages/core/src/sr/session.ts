@@ -113,12 +113,23 @@ function lastTrialNotRecall(trials: readonly TrialRecord[]): boolean {
 /**
  * Single point of soft-cap / caregiver-close routing: closes on a win unless the last logged
  * trial was a recall (or there were no trials at all). Sessions never end on failure — or on an
- * ambiguous unclear. All soft-cap branches in `handleTrialProbe` delegate here so this routing
- * rule lives in exactly one place.
+ * ambiguous unclear. Every soft-cap close (via `enterDistractor`) and caregiver close delegates
+ * here so this routing rule lives in exactly one place.
  */
 function closeSession(next: SessionState, endReason: "caregiver"): SessionState {
   if (lastTrialNotRecall(next.trials)) return { ...next, phase: "end_on_win", endReason };
   return { ...next, phase: "ended", endReason };
+}
+
+/**
+ * Enter a fresh distractor gap — unless the soft cap is reached, in which case decline to start it
+ * and close on a win. The cap gates STARTING a new gap, never finishing one (PLAN §4.2
+ * `withinSessionBounds()` gates the loop top, before `fillWithDistractorActivity`). `candidate`
+ * already carries the target rung + updated trials/progress; only `phase` is decided here.
+ */
+function enterDistractor(candidate: SessionState, at: number, config: SrConfig): SessionState {
+  if (softCapReached(candidate, at, config)) return closeSession(candidate, "caregiver");
+  return { ...candidate, phase: "distractor" };
 }
 
 export function sessionReduce(
@@ -132,9 +143,9 @@ export function sessionReduce(
     case "teach_done":
       return handleTeachDone(state, event.at, config);
     case "wait_elapsed":
-      return handleWaitElapsed(state, event.at, config);
+      return handleWaitElapsed(state);
     case "correction_done":
-      return handleCorrectionDone(state, config);
+      return handleCorrectionDone(state, event.at, config);
     case "probe_result":
       return handleProbe(state, event.outcome, event.at, config);
     case "end_requested":
@@ -145,12 +156,15 @@ export function sessionReduce(
 function handleTeachDone(state: SessionState, at: number, config: SrConfig): SessionState {
   if (state.phase === "teach") {
     // Assisted 0s success: the device showed the answer and the patient repeated it.
-    return {
-      ...state,
-      phase: "distractor",
-      intervalSec: state.progress.lastSuccessSec ?? config.baseIntervalSec,
-      trials: [...state.trials, trial(0, "recall", true, at)],
-    };
+    return enterDistractor(
+      {
+        ...state,
+        intervalSec: state.progress.lastSuccessSec ?? config.baseIntervalSec,
+        trials: [...state.trials, trial(0, "recall", true, at)],
+      },
+      at,
+      config,
+    );
   }
   if (state.phase === "end_on_win") {
     return {
@@ -162,22 +176,23 @@ function handleTeachDone(state: SessionState, at: number, config: SrConfig): Ses
   return state;
 }
 
-function handleWaitElapsed(state: SessionState, at: number, config: SrConfig): SessionState {
+function handleWaitElapsed(state: SessionState): SessionState {
   if (state.phase !== "distractor") return state;
-  if (softCapReached(state, at, config)) return closeSession(state, "caregiver");
+  // A gap that was allowed to start is always followed by its probe — the retrieval attempt is the
+  // clinical payload (§8b: intervals are content timing, not UI timing). The cap gates the next gap.
   return { ...state, phase: "awaiting_probe" };
 }
 
-function handleCorrectionDone(state: SessionState, config: SrConfig): SessionState {
+function handleCorrectionDone(state: SessionState, at: number, config: SrConfig): SessionState {
   if (state.phase !== "correcting") return state;
   const intervalSec = resetIntervalSec(state.progress.lastSuccessSec, config);
   if (intervalSec > config.baseIntervalSec) {
-    return { ...state, phase: "distractor", intervalSec };
+    return enterDistractor({ ...state, intervalSec }, at, config);
   }
   // Reverted to the base floor → count a base miss; enough of them end the session.
   const baseMisses = state.baseMisses + 1;
   if (baseMisses < config.baseMissesToEnd) {
-    return { ...state, phase: "distractor", intervalSec, baseMisses };
+    return enterDistractor({ ...state, intervalSec, baseMisses }, at, config);
   }
   const badSessions = state.progress.badSessions + 1;
   return {
@@ -213,12 +228,11 @@ function handleStartProbe(
     const unclearRun = state.unclearRun + 1;
     if (unclearRun < config.unclearCap) {
       // Re-probe the start question at 0s after a fresh distractor gap.
-      return {
-        ...state,
-        phase: "distractor",
-        unclearRun,
-        trials: [...state.trials, trial(0, "unclear", false, at)],
-      };
+      return enterDistractor(
+        { ...state, unclearRun, trials: [...state.trials, trial(0, "unclear", false, at)] },
+        at,
+        config,
+      );
     }
     // Two unclears → confirmed miss: reset streak, enter correction.
     return {
@@ -257,15 +271,18 @@ function handleStartProbe(
       trials,
     };
   }
-  return {
-    ...state,
-    phase: "distractor",
-    isStartProbe: false,
-    unclearRun: 0,
-    intervalSec: progress.lastSuccessSec ?? config.baseIntervalSec,
-    progress,
-    trials,
-  };
+  return enterDistractor(
+    {
+      ...state,
+      isStartProbe: false,
+      unclearRun: 0,
+      intervalSec: progress.lastSuccessSec ?? config.baseIntervalSec,
+      progress,
+      trials,
+    },
+    at,
+    config,
+  );
 }
 
 /** Streak-reset + correction routing shared by a start-probe miss and unclear-run conversion. */
@@ -285,29 +302,30 @@ function handleTrialProbe(
   at: number,
   config: SrConfig,
 ): SessionState {
-  const softCap = softCapReached(state, at, config);
   const { intervalSec } = state;
 
   if (outcome === "unclear") {
     const unclearRun = state.unclearRun + 1;
     if (unclearRun < config.unclearCap) {
-      const next: SessionState = {
-        ...state,
-        unclearRun,
-        trials: [...state.trials, trial(intervalSec, "unclear", false, at)],
-      };
-      // Unclear is neither success nor failure, but it didn't move the ladder either — a
-      // soft-cap close here still owes a win (delegated to closeSession).
-      if (softCap) return closeSession(next, "caregiver");
-      return { ...next, phase: "distractor" }; // re-probe the same rung
+      // Neither success nor failure and it didn't move the ladder — re-probe the same rung, unless
+      // starting that gap would cross the cap (delegated to enterDistractor → closeSession).
+      return enterDistractor(
+        {
+          ...state,
+          unclearRun,
+          trials: [...state.trials, trial(intervalSec, "unclear", false, at)],
+        },
+        at,
+        config,
+      );
     }
-    const next: SessionState = {
+    // Two unclears → confirmed miss: enter correction (not a new gap, so no cap check).
+    return {
       ...state,
+      phase: "correcting",
       unclearRun: 0,
       trials: [...state.trials, trial(intervalSec, "unclear", true, at)],
     };
-    if (softCap) return closeSession(next, "caregiver");
-    return { ...next, phase: "correcting" };
   }
 
   if (outcome === "recall") {
@@ -318,21 +336,24 @@ function handleTrialProbe(
       progress: { ...state.progress, lastSuccessSec: intervalSec },
       trials: [...state.trials, trial(intervalSec, "recall", false, at)],
     };
+    // Ceiling short-circuits before any cap logic: success here ends within-session work.
     if (isAtCeiling(intervalSec, config)) {
       return { ...next, phase: "ended", endReason: "ceiling", handoffToScheduler: true };
     }
-    if (softCap) return closeSession(next, "caregiver");
-    return { ...next, phase: "distractor", intervalSec: nextIntervalSec(intervalSec, config) };
+    return enterDistractor(
+      { ...next, intervalSec: nextIntervalSec(intervalSec, config) },
+      at,
+      config,
+    );
   }
 
-  // confirmed miss → errorless correction (device-delivered)
-  const next: SessionState = {
+  // Confirmed miss → errorless correction (device-delivered); not a new gap, so no cap check.
+  return {
     ...state,
+    phase: "correcting",
     unclearRun: 0,
     trials: [...state.trials, trial(intervalSec, "miss", true, at)],
   };
-  if (softCap) return closeSession(next, "caregiver");
-  return { ...next, phase: "correcting" };
 }
 
 function handleEndRequested(state: SessionState): SessionState {

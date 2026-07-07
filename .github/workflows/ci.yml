@@ -19,3 +19,30 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+
+  rls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.75.0
+      - run: supabase start # applies supabase/migrations from the repo root
+      - name: Export local stack credentials
+        run: |
+          supabase status -o env | while IFS='=' read -r key value; do
+            value="${value%\"}"
+            value="${value#\"}"
+            case "$key" in
+              API_URL) echo "SUPABASE_URL=$value" >> "$GITHUB_ENV" ;;
+              ANON_KEY) echo "SUPABASE_ANON_KEY=$value" >> "$GITHUB_ENV" ;;
+              SERVICE_ROLE_KEY) echo "SUPABASE_SERVICE_ROLE_KEY=$value" >> "$GITHUB_ENV" ;;
+            esac
+          done
+      - run: pnpm test:rls

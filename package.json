@@ -8,13 +8,21 @@
   "scripts": {
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
-    "test": "pnpm --filter @keepsake/core test",
-    "typecheck": "pnpm -r exec tsc --noEmit",
+    "test": "pnpm --filter @keepsake/core --filter web test",
+    "test:rls": "pnpm --filter @keepsake/db-tests test",
+    "typegen": "supabase gen types typescript --local > apps/web/src/lib/supabase/database.types.ts",
+    "typecheck": "pnpm -r exec tsc --noEmit && tsc --noEmit -p scripts/tsconfig.json",
     "lint": "biome check .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "seed": "tsx scripts/seed.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.0",
-    "lefthook": "^2.0.0"
+    "@keepsake/core": "workspace:*",
+    "@supabase/supabase-js": "2.110.1",
+    "@types/node": "^24",
+    "lefthook": "^2.0.0",
+    "tsx": "^4.23.0",
+    "typescript": "^5"
   }
 }
