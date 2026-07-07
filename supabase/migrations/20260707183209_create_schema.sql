@@ -167,7 +167,7 @@ create index idx_trials_session_id on public.trials (session_id);
 
 -- named composite indexes
 create index idx_targets_patient_id_status on public.targets (patient_id, status);
-create index idx_trials_target_id_created_at on public.trials (target_id, created_at);
+create index idx_trials_target_id_at on public.trials (target_id, at);
 create index idx_sessions_patient_id_started_at on public.sessions (patient_id, started_at);
 create index idx_target_state_next_due_at on public.target_state (next_due_at);
 

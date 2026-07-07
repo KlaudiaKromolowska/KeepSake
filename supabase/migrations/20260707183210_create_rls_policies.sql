@@ -219,3 +219,7 @@ create policy "target_state_delete_own" on public.target_state
 create policy "audit_log_insert_own" on public.audit_log
   for insert to authenticated
   with check (caregiver_id = (select auth.uid()));
+
+-- Defense-in-depth beyond absence-of-policy: even if a future migration ever adds an
+-- update/delete policy by mistake, these grants must exist for it to take effect at all.
+revoke update, delete on public.audit_log from authenticated, anon;
