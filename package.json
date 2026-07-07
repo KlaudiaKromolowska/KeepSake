@@ -9,6 +9,7 @@
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
     "test": "pnpm --filter @keepsake/core test",
+    "test:rls": "pnpm --filter @keepsake/db-tests test",
     "typecheck": "pnpm -r exec tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write ."
