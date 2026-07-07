@@ -111,8 +111,9 @@ Applies to every line written in this repo (mechanics/details: `PLAN.md §8b`).
 - **Don't stop mid-agreed-work.** Push to the agreed end state; stop only for genuine uncertainty,
   ambiguous intent, or destructive/irreversible actions needing sign-off. Don't silently switch an
   agreed approach — flag the roadblock and discuss first.
-- **Git:** never `git push` unless explicitly asked (committing is fine). Branch before working on
-  the default branch.
+- **Git workflow: commit → PR → additional review if needed → notify/merge.** Work on a feature
+  branch; pushing that branch and opening a PR is part of the flow (no need to ask). Never commit
+  or merge directly to `main` — merge only after notifying and getting sign-off on the PR.
 - **Free tiers as long as possible.** No purchases/subscriptions without asking (domains, books,
   paid APIs). Keep Claude API spend minimal: Haiku where it suffices, prompt caching, canned
   fixtures for demo takes. `*.vercel.app` beats a paid domain until there's a reason.

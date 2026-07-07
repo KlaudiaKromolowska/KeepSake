@@ -1,0 +1,20 @@
+{
+  "name": "keepsake",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@11.10.0",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "test": "pnpm --filter @keepsake/core test",
+    "typecheck": "pnpm -r exec tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.0",
+    "lefthook": "^2.0.0"
+  }
+}
