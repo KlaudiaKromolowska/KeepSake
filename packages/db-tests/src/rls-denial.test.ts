@@ -30,6 +30,13 @@ interface InsertResult {
   error: { code?: string; message: string } | null;
 }
 
+interface CrossInsertResult {
+  error: { code?: string; message: string } | null;
+  /** Exact-match column values identifying the row the attacker tried to create, so the caller
+   *  can prove via service role that it was never persisted — not just that an error came back. */
+  marker: Record<string, unknown>;
+}
+
 interface TableSpec {
   table: string;
   pk: string;
@@ -40,12 +47,16 @@ interface TableSpec {
   ownerCanMutate: boolean;
   /** Insert a brand-new row fully owned by `g` (creating any extra parent rows it needs). */
   insertOwn: (client: SupabaseClient, g: Graph) => Promise<InsertResult>;
-  /** As `attackerClient` (belonging to `attacker`), attempt to insert into `victim`'s container. */
+  /** As `attackerClient` (belonging to `attacker`), attempt to insert into `victim`'s container.
+   *  Must be a bare `.insert()` with no `.select()` chained — chaining a RETURNING clause makes
+   *  the error ambiguous between "WITH CHECK blocked the insert" and "no SELECT policy exists to
+   *  return the row", which is vacuous for tables like audit_log that have no SELECT policy at
+   *  all. The returned `marker` lets the caller independently verify non-persistence. */
   insertCross: (
     attackerClient: SupabaseClient,
     attacker: Graph,
     victim: Graph,
-  ) => Promise<InsertResult>;
+  ) => Promise<CrossInsertResult>;
   /** A payload anon can attempt to insert using known-valid (graphA's) ids. */
   anonInsertPayload: (g: Graph) => Record<string, unknown>;
   /** Fields to attempt to change; used for both the positive-control and cross-tenant update. */
@@ -83,7 +94,8 @@ function resolveEnv(): { url: string; anonKey: string; serviceRoleKey: string } 
 
 async function assertReachable(url: string): Promise<void> {
   try {
-    await fetch(`${url}/auth/v1/health`, { signal: AbortSignal.timeout(5000) });
+    const res = await fetch(`${url}/auth/v1/health`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error(`health endpoint returned ${res.status}`);
   } catch {
     throw new Error(
       `local Supabase stack not reachable at ${url} — start it with \`supabase start\`.`,
@@ -195,26 +207,64 @@ beforeAll(async () => {
 
   clientA = await signInClient(graphA.email, graphA.password);
   clientB = await signInClient(graphB.email, graphB.password);
+
+  // Sanity-check auth actually took: a silently-anon client (bad password plumbing, wrong
+  // project, stale key) must fail the suite loudly here, not incidentally via passing "denial"
+  // tests further down that would be vacuous against an anon session.
+  const [userA, userB] = await Promise.all([clientA.auth.getUser(), clientB.auth.getUser()]);
+  if (userA.data.user?.id !== graphA.userId) {
+    throw new Error(
+      `clientA did not authenticate as graphA: expected ${graphA.userId}, got ${userA.data.user?.id ?? "anon"}`,
+    );
+  }
+  if (userB.data.user?.id !== graphB.userId) {
+    throw new Error(
+      `clientB did not authenticate as graphB: expected ${graphB.userId}, got ${userB.data.user?.id ?? "anon"}`,
+    );
+  }
 }, 30000);
 
 afterAll(async () => {
-  // audit_log deliberately has no FK to auth.users (must survive account erasure) — delete it
-  // explicitly. Everything else cascades from patients -> auth.users on user deletion.
-  await admin.from("audit_log").delete().in("caregiver_id", [graphA.userId, graphB.userId]);
-  await admin.auth.admin.deleteUser(graphA.userId);
-  await admin.auth.admin.deleteUser(graphB.userId);
+  // beforeAll may have thrown before `admin` was even created (e.g. resolveEnv/assertReachable
+  // failure) — nothing was seeded, so there is nothing to clean up.
+  if (!admin) return;
 
-  const leftoverPatients = await admin
-    .from("patients")
-    .select("id")
-    .in("caregiver_id", [graphA.userId, graphB.userId]);
-  expect(leftoverPatients.data ?? []).toHaveLength(0);
+  // Only include graphs that actually finished seeding — a mid-beforeAll throw can leave one of
+  // graphA/graphB undefined, and this must not abort cleanup of the other.
+  const graphs = [graphA, graphB].filter((g): g is Graph => Boolean(g));
+  const userIds = graphs.map((g) => g.userId);
 
-  const leftoverAudit = await admin
-    .from("audit_log")
-    .select("id")
-    .in("caregiver_id", [graphA.userId, graphB.userId]);
-  expect(leftoverAudit.data ?? []).toHaveLength(0);
+  if (userIds.length > 0) {
+    // audit_log deliberately has no FK to auth.users (must survive account erasure) — delete it
+    // explicitly. Everything else cascades from patients -> auth.users on user deletion.
+    try {
+      const { error } = await admin.from("audit_log").delete().in("caregiver_id", userIds);
+      if (error) console.warn(`audit_log cleanup failed: ${error.message}`);
+    } catch (err) {
+      console.warn(`audit_log cleanup threw: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  for (const g of graphs) {
+    try {
+      const { error } = await admin.auth.admin.deleteUser(g.userId);
+      if (error) console.warn(`deleteUser failed for ${g.email}: ${error.message}`);
+    } catch (err) {
+      console.warn(
+        `deleteUser threw for ${g.email}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  // The leftover-rows assertion only makes sense when both sides of the cross-tenant graph
+  // existed — with just one graph there's no cross-tenant cleanup to verify.
+  if (graphA && graphB) {
+    const leftoverPatients = await admin.from("patients").select("id").in("caregiver_id", userIds);
+    expect(leftoverPatients.data ?? []).toHaveLength(0);
+
+    const leftoverAudit = await admin.from("audit_log").select("id").in("caregiver_id", userIds);
+    expect(leftoverAudit.data ?? []).toHaveLength(0);
+  }
 }, 30000);
 
 const tableSpecs: TableSpec[] = [
@@ -230,12 +280,11 @@ const tableSpecs: TableSpec[] = [
         .insert({ caregiver_id: g.userId, display_name: "extra patient", timezone: "UTC" })
         .select("id")
         .single(),
-    insertCross: async (client, _attacker, victim) =>
-      await client
-        .from("patients")
-        .insert({ caregiver_id: victim.userId, display_name: "impersonation", timezone: "UTC" })
-        .select("id")
-        .single(),
+    insertCross: async (client, _attacker, victim) => {
+      const marker = { caregiver_id: victim.userId, display_name: "impersonation" };
+      const { error } = await client.from("patients").insert({ ...marker, timezone: "UTC" });
+      return { error, marker };
+    },
     anonInsertPayload: (g) => ({ caregiver_id: g.userId, display_name: "anon", timezone: "UTC" }),
     updatePatch: { display_name: "changed" },
   },
@@ -251,12 +300,11 @@ const tableSpecs: TableSpec[] = [
         .insert({ patient_id: g.patientId, question: "extra q", answer: "extra a" })
         .select("id")
         .single(),
-    insertCross: async (client, _attacker, victim) =>
-      await client
-        .from("targets")
-        .insert({ patient_id: victim.patientId, question: "attack", answer: "attack" })
-        .select("id")
-        .single(),
+    insertCross: async (client, _attacker, victim) => {
+      const marker = { patient_id: victim.patientId, question: "attack" };
+      const { error } = await client.from("targets").insert({ ...marker, answer: "attack" });
+      return { error, marker };
+    },
     anonInsertPayload: (g) => ({ patient_id: g.patientId, question: "anon", answer: "anon" }),
     updatePatch: { question: "changed" },
   },
@@ -272,12 +320,11 @@ const tableSpecs: TableSpec[] = [
         .insert({ patient_id: g.patientId, started_at: new Date().toISOString() })
         .select("id")
         .single(),
-    insertCross: async (client, _attacker, victim) =>
-      await client
-        .from("sessions")
-        .insert({ patient_id: victim.patientId, started_at: new Date().toISOString() })
-        .select("id")
-        .single(),
+    insertCross: async (client, _attacker, victim) => {
+      const marker = { patient_id: victim.patientId, started_at: new Date().toISOString() };
+      const { error } = await client.from("sessions").insert(marker);
+      return { error, marker };
+    },
     anonInsertPayload: (g) => ({ patient_id: g.patientId, started_at: new Date().toISOString() }),
     updatePatch: { summary: { note: "changed" } },
   },
@@ -299,18 +346,17 @@ const tableSpecs: TableSpec[] = [
         })
         .select("id")
         .single(),
-    insertCross: async (client, _attacker, victim) =>
-      await client
+    insertCross: async (client, _attacker, victim) => {
+      const marker = {
+        session_id: victim.sessionId,
+        target_id: victim.targetId,
+        at: new Date().toISOString(),
+      };
+      const { error } = await client
         .from("trials")
-        .insert({
-          session_id: victim.sessionId,
-          target_id: victim.targetId,
-          interval_sec: 45,
-          outcome: "recall",
-          at: new Date().toISOString(),
-        })
-        .select("id")
-        .single(),
+        .insert({ ...marker, interval_sec: 45, outcome: "recall" });
+      return { error, marker };
+    },
     anonInsertPayload: (g) => ({
       session_id: g.sessionId,
       target_id: g.targetId,
@@ -350,11 +396,9 @@ const tableSpecs: TableSpec[] = [
         .select("id")
         .single();
       if (scaffoldErr || !extraTarget) throw new Error(`scaffold failed: ${scaffoldErr?.message}`);
-      return client
-        .from("target_state")
-        .insert({ target_id: extraTarget.id })
-        .select("target_id")
-        .single();
+      const marker = { target_id: extraTarget.id };
+      const { error } = await client.from("target_state").insert(marker);
+      return { error, marker };
     },
     anonInsertPayload: (g) => ({ target_id: g.targetId }),
     updatePatch: { start_streak: 5 },
@@ -385,11 +429,9 @@ const tableSpecs: TableSpec[] = [
         .select("id")
         .single();
       if (scaffoldErr || !extraPatient) throw new Error(`scaffold failed: ${scaffoldErr?.message}`);
-      return client
-        .from("consent")
-        .insert({ patient_id: extraPatient.id })
-        .select("patient_id")
-        .single();
+      const marker = { patient_id: extraPatient.id };
+      const { error } = await client.from("consent").insert(marker);
+      return { error, marker };
     },
     anonInsertPayload: (g) => ({ patient_id: g.patientId }),
     updatePatch: { granted_at: new Date().toISOString() },
@@ -417,12 +459,14 @@ const tableSpecs: TableSpec[] = [
         .limit(1)
         .single();
     },
-    insertCross: async (client, _attacker, victim) =>
-      await client
-        .from("audit_log")
-        .insert({ caregiver_id: victim.userId, action: "data_access", detail: {} })
-        .select("id")
-        .single(),
+    insertCross: async (client, _attacker, victim) => {
+      // Bare insert, no `.select()` — audit_log has no SELECT policy for authenticated at all,
+      // so chaining `.select()` here would 42501 on the RETURNING regardless of whether
+      // WITH CHECK actually held, making this vacuous against a weakened/dropped WITH CHECK.
+      const marker = { caregiver_id: victim.userId, action: "data_export" };
+      const { error } = await client.from("audit_log").insert({ ...marker, detail: {} });
+      return { error, marker };
+    },
     anonInsertPayload: (g) => ({ caregiver_id: g.userId, action: "data_access", detail: {} }),
     updatePatch: { detail: { changed: true } },
   },
@@ -476,10 +520,17 @@ describe.each(tableSpecs)("RLS: $table", (spec) => {
     expect(leaked).toBe(false);
   });
 
-  it("cross-tenant INSERT: B cannot insert into A's containers (42501)", async () => {
-    const { error } = await spec.insertCross(clientB, graphB, graphA);
+  it("cross-tenant INSERT: B cannot insert into A's containers (42501), and nothing persists", async () => {
+    const { error, marker } = await spec.insertCross(clientB, graphB, graphA);
     expect(error).not.toBeNull();
     expect(error?.code).toBe("42501");
+
+    // Prove non-persistence directly via service role, not just that an error string came back —
+    // a WITH CHECK that was weakened or dropped could still 42501 on the RETURNING clause for
+    // tables without an authenticated SELECT policy (e.g. audit_log), while still letting the row
+    // through. Bare insert above + this check closes that gap.
+    const persisted = await admin.from(spec.table).select(spec.pk).match(marker);
+    expect(persisted.data ?? []).toHaveLength(0);
   });
 
   it("cross-tenant UPDATE/DELETE: B's writes to A's rows affect 0 rows", async () => {
