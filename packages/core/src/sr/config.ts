@@ -46,7 +46,7 @@ export const DEFAULT_SR_CONFIG = {
   gapCapDays: 14,
   gapShrink: 0.5,
   gapFloorDays: 1,
-  boosterCadenceDays: [7, 14, 30, 90],
-  candidacyLevelsSec: [0, 15, 30],
+  boosterCadenceDays: Object.freeze([7, 14, 30, 90]),
+  candidacyLevelsSec: Object.freeze([0, 15, 30]),
   candidacyAttemptsPerLevel: 3,
 } satisfies SrConfig;

@@ -11,7 +11,11 @@ export type SessionPhase =
   | "end_on_win" // closing guaranteed 0s success: answer shown, patient repeats
   | "ended";
 
-/** Cross-session per-target state (persisted as the target_state row). */
+/**
+ * Cross-session per-target state (persisted as the target_state row).
+ * `lastStartSuccessDay` and `sessionCount` have no column in the PLAN §8 target_state sketch —
+ * Phase 2 must add them (persistence gap; the engine, not the schema, is authoritative for now).
+ */
 export interface TargetProgress {
   lastSuccessSec: number | null;
   startStreak: number;
@@ -49,7 +53,7 @@ export type SessionEvent =
 export function startSession(
   progress: TargetProgress,
   opts: { at: number; timeZone: string },
-  // biome-ignore lint/correctness/noUnusedFunctionParameters: pinned public signature (Task 4 scheduler calls this shape)
+  // biome-ignore lint/correctness/noUnusedFunctionParameters: reserved for signature stability
   config: SrConfig,
 ): SessionState {
   const isFirstSession = progress.sessionCount === 0;

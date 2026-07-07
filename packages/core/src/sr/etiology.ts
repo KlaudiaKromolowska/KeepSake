@@ -11,6 +11,8 @@ export interface EtiologyDefaults {
 
 // No head-to-head cross-etiology trial exists — these tunings are evidence-informed defaults,
 // flagged here as a starting point to refine once outcome data comes in.
+// `candidacyLevelsSec` is deliberately etiology-invariant: it's the fixed Brush & Camp clinical
+// screen, not a tunable protocol parameter, so no case below touches it.
 export function defaultsForEtiology(etiology: Etiology): EtiologyDefaults {
   switch (etiology) {
     case "alzheimers":
