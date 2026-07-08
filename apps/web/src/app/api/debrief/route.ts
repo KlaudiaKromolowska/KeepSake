@@ -65,6 +65,7 @@ export async function POST(request: Request): Promise<Response> {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
     },
   });
 }

@@ -12,12 +12,8 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* MVP ships light-only: the kiosk forces light for demo consistency, and the OS-dark palette
+   was never contrast-designed (QA 2026-07-08 finding 1). Revisit dark mode post-hackathon. */
 
 body {
   background: var(--background);
