@@ -38,6 +38,21 @@ export const WIZARD_COPY = {
   candidacy: {
     note: "A quick suitability check comes before the first practice session.",
   },
+  photoQa: {
+    heading: "Check the photo",
+    intro: "Ask Claude whether a photo works well as a picture cue for this memory.",
+    checking: "Checking…",
+    noPhotos: "Add photos to check — none are available yet.",
+    verdictGood: "This photo works well",
+    verdictNeedsWork: "This photo could work better",
+    reasonsHeading: "What Claude noticed",
+    cropAdviceLabel: "Suggested crop",
+    errors: {
+      missing: "That photo couldn't be found just now.",
+      quota: "Claude's help has paused for a little while. Please try again later.",
+      unavailable: "Claude couldn't check that photo just now. Please try again.",
+    },
+  },
   handEntry: {
     toggle: "Enter a memory by hand",
     heading: "Enter a memory by hand",

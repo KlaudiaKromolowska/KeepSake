@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import Link from "next/link";
 import { WizardView } from "@/components/wizard/wizard-view";
 import { requireUser } from "@/lib/actions";
@@ -5,12 +7,21 @@ import { WIZARD_COPY } from "@/lib/wizard/copy";
 
 export const metadata = { title: WIZARD_COPY.page.title };
 
+/** Hardcoded demo candidates (Phase-6 ships real seeded assets) — only shown if present on disk. */
+const PHOTO_CANDIDATES = ["/images/lena.jpg", "/images/lena-group.jpg"];
+
+function availablePhotos(): string[] {
+  const publicDir = resolve(process.cwd(), "public");
+  return PHOTO_CANDIDATES.filter((path) => existsSync(join(publicDir, path)));
+}
+
 /**
  * Caregiver-facing target wizard. Light theme is forced on the container (`bg-white text-zinc-900`):
  * QA found a dark/light flash between screens, and this page must not depend on the OS scheme.
  */
 export default async function NewTargetPage() {
   await requireUser();
+  const photoOptions = availablePhotos();
 
   return (
     <main className="flex min-h-dvh flex-col items-center gap-8 bg-white px-6 py-10 text-zinc-900">
@@ -25,7 +36,7 @@ export default async function NewTargetPage() {
         <p className="text-lg text-zinc-700">{WIZARD_COPY.page.intro}</p>
       </div>
 
-      <WizardView />
+      <WizardView photoOptions={photoOptions} />
     </main>
   );
 }

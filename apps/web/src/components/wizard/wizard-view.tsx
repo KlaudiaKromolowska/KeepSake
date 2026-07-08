@@ -6,6 +6,7 @@ import { createTargetAction, generateTargetAction } from "@/lib/wizard/actions";
 import { WIZARD_COPY } from "@/lib/wizard/copy";
 import type { WizardProposal } from "@/lib/wizard/schema";
 import { HandEntryForm } from "./hand-entry-form";
+import { PhotoQaSection } from "./photo-qa-card";
 import { ProposalCard } from "./proposal-card";
 
 const C = WIZARD_COPY;
@@ -16,7 +17,7 @@ const C = WIZARD_COPY;
  * creation. Nothing persists until an explicit Accept/Save tap; errors are calm and never show raw
  * server text.
  */
-export function WizardView() {
+export function WizardView({ photoOptions }: { photoOptions: string[] }) {
   const router = useRouter();
   const [description, setDescription] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -147,6 +148,8 @@ export function WizardView() {
           onTryAgain={generate}
         />
       )}
+
+      {proposal && <PhotoQaSection photoOptions={photoOptions} />}
 
       <div className="flex flex-col gap-4">
         <button
