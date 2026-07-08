@@ -10,11 +10,18 @@ const C = WIZARD_COPY.photoQa;
 /**
  * "Check the photo" section on the wizard page — shown once a proposal exists. Lists one button per
  * candidate photo the page found on disk (server-checked; this component never touches the
- * filesystem). Tapping a button runs the vision QA action and shows its verdict below. An empty
- * `photoOptions` list means no seeded photo exists yet (a Phase-6 asset deliverable) — shows a calm
- * line rather than an empty section.
+ * filesystem). Tapping a button runs the vision QA action — passing the proposal's question +
+ * answer so crop advice points at the person the target is about — and shows its verdict below.
+ * An empty `photoOptions` list means no seeded photo exists yet (a Phase-6 asset deliverable) —
+ * shows a calm line rather than an empty section.
  */
-export function PhotoQaSection({ photoOptions }: { photoOptions: string[] }) {
+export function PhotoQaSection({
+  photoOptions,
+  target,
+}: {
+  photoOptions: string[];
+  target?: { question: string; answer: string };
+}) {
   const [selected, setSelected] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<PhotoQaResult | null>(null);
@@ -26,7 +33,7 @@ export function PhotoQaSection({ photoOptions }: { photoOptions: string[] }) {
     setError(null);
     setResult(null);
     try {
-      const res = await qaPhotoAction({ imagePath });
+      const res = await qaPhotoAction({ imagePath, ...(target ? { target } : {}) });
       if (res.error !== null) setError(res.error);
       else setResult(res.data);
     } catch {

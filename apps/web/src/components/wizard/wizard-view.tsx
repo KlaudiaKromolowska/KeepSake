@@ -149,7 +149,12 @@ export function WizardView({ photoOptions }: { photoOptions: string[] }) {
         />
       )}
 
-      {proposal && <PhotoQaSection photoOptions={photoOptions} />}
+      {proposal && (
+        <PhotoQaSection
+          photoOptions={photoOptions}
+          target={{ question: proposal.question, answer: proposal.answer }}
+        />
+      )}
 
       <div className="flex flex-col gap-4">
         <button

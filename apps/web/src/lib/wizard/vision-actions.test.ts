@@ -72,6 +72,25 @@ describe("qaPhotoAction", () => {
     expect(call.user[1]).toMatchObject({ type: "text" });
   });
 
+  it("includes the memory target in the text block when provided", async () => {
+    generateStructuredMock.mockResolvedValueOnce(goodResult);
+    const res = await qaPhotoAction({
+      imagePath: "/images/lena.jpg",
+      target: { question: "What is your granddaughter's name?", answer: "Lena" },
+    });
+    expect(res.error).toBeNull();
+    const text = generateStructuredMock.mock.calls[0][0].user[1].text as string;
+    expect(text).toContain("What is your granddaughter's name?");
+    expect(text).toContain("Lena");
+  });
+
+  it("omits target lines when no target is provided", async () => {
+    generateStructuredMock.mockResolvedValueOnce(goodResult);
+    await qaPhotoAction({ imagePath: "/images/lena.jpg" });
+    const text = generateStructuredMock.mock.calls[0][0].user[1].text as string;
+    expect(text).not.toMatch(/memory target/);
+  });
+
   it("returns a needs_work verdict with crop advice", async () => {
     generateStructuredMock.mockResolvedValueOnce(needsWorkResult);
     const res = await qaPhotoAction({ imagePath: "/images/lena-group.jpg" });
