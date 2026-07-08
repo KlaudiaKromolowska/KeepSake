@@ -631,17 +631,27 @@ function driveMasteredArc(): {
   };
 }
 
-// --- driving a third, mid-acquisition target (the E2E's stable acquisition session) ----------
+// --- driving a third, still-acquiring target (the E2E's stable acquisition session) ----------
 //
-// A newer memory ("Ewa") still climbing the ladder — never handed off to the between-session
-// scheduler, so schedule_mode stays null and due-status reads "acquisition" (daily practice
-// suits this stage). This is the target the kiosk opens a session on: `selectSessionTarget` gives
-// the acquisition slot to the earliest-created still-acquiring target and prioritises it (priority
-// 0) over the two mastered targets' booster check-ins, so the never-cut E2E always lands on a real
-// start-probe → climb session. start_streak stays 1 (< masteryStreak 3), so a session-start recall
-// keeps climbing instead of tripping mastery. Every value still traces to real @keepsake/core
-// output. Created after Lena + Kraków, but since both are mastered (excluded from the acquisition
-// filter) this target holds the single acquisition slot regardless of order.
+// A newer memory ("Ewa") early in acquisition: it has never handed off to the between-session
+// scheduler (never reached the ceiling), so target_state carries no ScheduleState — schedule_mode
+// stays null, which due-status reads as "acquisition" (daily practice suits this stage). As the
+// sole still-acquiring target it holds the single acquisition slot, and selectSessionTarget always
+// prioritises the acquisition slot (priority 0 when due — and "acquisition" is always due) over the
+// two mastered targets' booster check-ins. So the never-cut E2E always opens on a real start-probe
+// session on this target. start_streak stays 1 (< masteryStreak 3), so the E2E's session-start
+// recall keeps it acquiring instead of tripping mastery.
+//
+// Why the base rung (r0 = 15s), not a mid-ladder rung: the kiosk re-validates every persisted
+// session snapshot with a zod schema whose intervalSec/lastSuccessSec are `.int()`, but the
+// alzheimers growthFactor 1.5 makes every rung ABOVE base fractional (22.5, 33.75, …) — so a
+// live-driven session opening at a fractional lastSuccessSec would fail that validation and silently
+// drop every save (see the follow-up flagged in the PR). The base rung 15 and the ceiling 960 are
+// the only integer rungs; base keeps this target genuinely "acquisition" (schedule_mode null), which
+// — unlike the ceiling's "between" mode — never grows forward when a session ends, so the target
+// stays the acquisition slot across repeated demo/E2E runs on the same seed. The seeded *trial
+// history* is written service-side and may hold fractional rungs; only the live-driven target's
+// persisted lastSuccessSec must be integer. Every value still traces to real @keepsake/core output.
 
 function driveAcquiringArc(): {
   candidacyTrials: TrialRecord[];
@@ -658,8 +668,9 @@ function driveAcquiringArc(): {
   };
   const day = (n: number) => zonedTimeMs(dateNDaysAgo(n, PATIENT_TZ), 9, 0, PATIENT_TZ);
 
-  // Day −3: candidacy screen (Brush & Camp), then session 1 (teach + 3 climbs r0→r2, ends on win).
-  let cursor = day(3);
+  // Day −2: candidacy screen (Brush & Camp), then session 1 — teach + a base-rung recall, ends on
+  // win. lastSuccessSec settles at r0 (15) and never climbs above it, keeping it the integer floor.
+  let cursor = day(2);
   let candidacy: CandidacyState = initialCandidacyState();
   const sessionStart = cursor;
   let li = 0;
@@ -677,39 +688,30 @@ function driveAcquiringArc(): {
   li = 0;
   ({ at: cursor, state: a1 } = teach(cursor, a1, li++));
   ({ at: cursor, state: a1 } = wait(cursor, a1));
-  ({ at: cursor, state: a1 } = probe(cursor, a1, "recall", li++)); // r0
-  ({ at: cursor, state: a1 } = wait(cursor, a1));
-  ({ at: cursor, state: a1 } = probe(cursor, a1, "recall", li++)); // r1
-  ({ at: cursor, state: a1 } = wait(cursor, a1));
-  ({ at: cursor, state: a1 } = probe(cursor, a1, "recall", li++)); // r2
+  ({ at: cursor, state: a1 } = probe(cursor, a1, "recall", li++)); // r0 (15)
   ({ at: cursor, state: a1 } = endSession(cursor, a1, li++));
   assertState("acquiring-a1", a1, {
     endReason: "caregiver",
     startStreak: 0,
     handoff: false,
-    lastSuccessSec: 33.75, // r2
+    lastSuccessSec: 15, // r0 — integer base rung, the rung the live E2E session opens on
   });
   const a1End = cursor;
 
-  // Day −1: session 2 — start-probe recall (streak 1), reconfirm r2, climb r3→r4, ends on win. No
-  // ceiling reached → no scheduler handoff → schedule_mode stays null, so this target reads as
-  // "acquisition" (due now) and wins session selection over the mastered boosters.
+  // Day −1: session 2 — a single session-start recall takes the streak to 1 (still < masteryStreak
+  // 3) and the session closes on that same win; lastSuccessSec stays at the base rung (a start probe
+  // is a 0-delay datapoint that never moves the ladder). No ceiling → no handoff → schedule_mode
+  // stays null (this target reads "acquisition"/due-now and holds the acquisition slot).
   cursor = day(1);
   let a2 = startSession(a1.progress, { at: cursor, timeZone: PATIENT_TZ }, config);
   li = 0;
   ({ at: cursor, state: a2 } = probe(cursor, a2, "recall", li++)); // start probe → streak 1
-  ({ at: cursor, state: a2 } = wait(cursor, a2));
-  ({ at: cursor, state: a2 } = probe(cursor, a2, "recall", li++)); // reconfirm r2
-  ({ at: cursor, state: a2 } = wait(cursor, a2));
-  ({ at: cursor, state: a2 } = probe(cursor, a2, "recall", li++)); // climb r3
-  ({ at: cursor, state: a2 } = wait(cursor, a2));
-  ({ at: cursor, state: a2 } = probe(cursor, a2, "recall", li++)); // climb r4
   ({ at: cursor, state: a2 } = endSession(cursor, a2, li++));
   assertState("acquiring-a2", a2, {
     endReason: "caregiver",
     startStreak: 1,
     handoff: false,
-    lastSuccessSec: 75.9375, // r4
+    lastSuccessSec: 15, // still r0
   });
   const a2End = cursor;
 
@@ -960,11 +962,12 @@ async function seedMasteredTarget(admin: SupabaseClient, patientId: string): Pro
 }
 
 /**
- * Insert the third, still-acquiring target ("Ewa") and its two-session climb history. No scheduler
- * handoff happened (never reached the ceiling), so target_state carries no ScheduleState —
- * schedule_mode stays null, which due-status reads as "acquisition". This is the target the kiosk
- * opens a session on (the acquisition slot; selectSessionTarget prioritises it), giving the
- * never-cut E2E its stable teach→climb start-probe session.
+ * Insert the third, still-acquiring target ("Ewa") and its two-session base-rung history. No
+ * scheduler handoff happened (never reached the ceiling), so target_state carries no ScheduleState —
+ * schedule_mode stays null, which due-status reads as "acquisition" (always due). As the sole
+ * still-acquiring target it holds the single acquisition slot, so selectSessionTarget prioritises it
+ * over the mastered boosters and the kiosk opens a session on it, giving the never-cut E2E its
+ * stable start-probe session at the integer base rung (see driveAcquiringArc for why it must).
  */
 async function seedAcquiringTarget(admin: SupabaseClient, patientId: string): Promise<void> {
   const { data: target, error: targetErr } = await admin
@@ -977,7 +980,7 @@ async function seedAcquiringTarget(admin: SupabaseClient, patientId: string): Pr
       answer_format: answerFormat,
       candidacy: "passed",
       status: "active",
-      image_url: "/images/ewa.jpg", // placeholder, mirrors the Lena target
+      image_url: "/images/ewa.jpg", // placeholder photo asset (Phase 6 §16.2), mirrors Lena
     })
     .select("id")
     .single();
@@ -1011,16 +1014,17 @@ async function seedAcquiringTarget(admin: SupabaseClient, patientId: string): Pr
   }
 
   const progress = arc.finalProgress;
-  // No ScheduleState: schedule_mode stays null (still within-session only) — this is what makes
-  // due-status classify the target as "acquisition" so it holds the single acquisition slot.
   const { error: stateErr } = await admin.from("target_state").insert({
     target_id: targetId,
-    last_success_interval_sec: progress.lastSuccessSec,
-    start_streak: progress.startStreak,
+    last_success_interval_sec: progress.lastSuccessSec, // 15 — integer base rung
+    start_streak: progress.startStreak, // 1 — still acquiring (< masteryStreak 3)
     last_start_success_day: progress.lastStartSuccessDay,
     bad_sessions: progress.badSessions,
-    mastered_at: null,
+    mastered_at: null, // not mastered → holds the acquisition slot
     session_count: progress.sessionCount,
+    // No ScheduleState (no ceiling handoff): schedule_mode null → due-status "acquisition" (always
+    // due). Unlike "between"/"booster" modes, a null schedule never grows forward when a session
+    // ends, so this target stays the due acquisition slot across repeated runs on the same seed.
     schedule_mode: null,
     between_session_gap_days: null,
     booster_step: null,

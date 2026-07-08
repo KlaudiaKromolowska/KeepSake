@@ -13,14 +13,13 @@ import { expect, type Page, test } from "@playwright/test";
  *  - CLAUDE_FIXTURES=1 so every AI call (wizard/debrief/rct) replays a recorded fixture
  *    (packages/core/prompts/fixtures/*.json) instead of hitting the real Claude API.
  *
- * Distractor waits: the acquiring target is several rungs up the ladder (last success r4 ≈ 76s),
- * so a fresh distractor gap opens above the 60s real-time cap. Rather than waiting it out, this
- * test uses the same "Adjust wait" control a caregiver has in the real kiosk (DistractorCard) to
- * collapse the gap to its floor rung (15s — DEFAULT_SR_CONFIG.baseIntervalSec; the seeded demo
- * patient is "alzheimers", whose etiology tuning only overrides growthFactor, not baseIntervalSec —
- * packages/core/src/sr/etiology.ts) — the smallest legitimate mechanism already in the app. Waits
- * at or under 60s always play in real time (REALTIME_MAX_SEC, wait-policy.ts) regardless of
- * DEMO_SPEED.
+ * Distractor waits: the acquiring target sits at the base rung (15s — DEFAULT_SR_CONFIG.
+ * baseIntervalSec; the seeded demo patient is "alzheimers", whose etiology tuning only overrides
+ * growthFactor, not baseIntervalSec — packages/core/src/sr/etiology.ts), so each gap already plays
+ * in real time (≤ 60s always plays live regardless of DEMO_SPEED — REALTIME_MAX_SEC, wait-policy.ts).
+ * The test still exercises the kiosk's "Adjust wait" control (DistractorCard) before each probe to
+ * pin the gap to that floor rung — the same legitimate mechanism a caregiver has, and the path the
+ * demo/film relies on when a target's gaps are large.
  */
 test("demo login → wizard → session → debrief → RCT report", async ({ page }) => {
   // 1. Demo login
