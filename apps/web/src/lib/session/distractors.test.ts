@@ -26,4 +26,20 @@ describe("distractorForTrial", () => {
     expect(distractorForTrial(DISTRACTOR_PROMPTS.length)).toBe(DISTRACTOR_PROMPTS[0]);
     expect(distractorForTrial(DISTRACTOR_PROMPTS.length + 2)).toBe(DISTRACTOR_PROMPTS[2]);
   });
+
+  it("uses the personalized list when provided", () => {
+    const personalized = ["Ask about the garden.", "Talk about yesterday's walk."];
+    expect(distractorForTrial(0, personalized)).toBe(personalized[0]);
+    expect(distractorForTrial(1, personalized)).toBe(personalized[1]);
+  });
+
+  it("wraps around within the personalized list independently of the static list length", () => {
+    const personalized = ["Ask about the garden.", "Talk about yesterday's walk."];
+    expect(distractorForTrial(2, personalized)).toBe(personalized[0]);
+  });
+
+  it("falls back to the static list when prompts is undefined or empty", () => {
+    expect(distractorForTrial(0, undefined)).toBe(DISTRACTOR_PROMPTS[0]);
+    expect(distractorForTrial(0, [])).toBe(DISTRACTOR_PROMPTS[0]);
+  });
 });
