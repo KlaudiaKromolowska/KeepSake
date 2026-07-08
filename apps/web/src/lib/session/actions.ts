@@ -19,6 +19,7 @@ import {
   annotateSessionInputSchema,
   endSessionInputSchema,
   recordTrialInputSchema,
+  saveSessionAffectInputSchema,
   saveSessionNoteInputSchema,
   sessionStateSchema,
   startSessionInputSchema,
@@ -414,6 +415,24 @@ export async function endSessionAction(input: unknown): Promise<ActionResult<nul
   if (closeErr) return failAction("endSession: close", closeErr, "Could not close the session.");
 
   return applyEndState(supabase, targetId, applied);
+}
+
+/**
+ * Two-tap patient affect (5.4). Best-effort by design: the columns are nullable (null = skipped)
+ * and the kiosk never blocks the session flow on this save.
+ */
+export async function saveSessionAffectAction(input: unknown): Promise<ActionResult<null>> {
+  const parsed = saveSessionAffectInputSchema.safeParse(input);
+  if (!parsed.success) return { data: null, error: zerr(parsed.error.issues) };
+  const { sessionId, point, affect } = parsed.data;
+
+  const { supabase } = await requireUser();
+  const { error } = await supabase
+    .from("sessions")
+    .update(point === "pre" ? { affect_pre: affect } : { affect_post: affect })
+    .eq("id", sessionId);
+  if (error) return failAction("saveSessionAffect: update", error, "Couldn't save that just now.");
+  return { data: null, error: null };
 }
 
 export async function saveSessionNoteAction(input: unknown): Promise<ActionResult<null>> {

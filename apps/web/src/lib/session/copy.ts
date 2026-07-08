@@ -47,6 +47,15 @@ export const SESSION_COPY = {
     notesSaved: "Saved",
     home: "Back to home",
   },
+  affect: {
+    preHeading: "Before we begin",
+    preQuestion: "How are you feeling right now?",
+    postQuestion: "And how are you feeling now?",
+    content: "Feeling good",
+    unsettled: "A bit unsettled",
+    skip: "Skip this",
+    thanks: "Thank you for sharing.",
+  },
   annotations: {
     answerCard: "Answer card",
     answerCardPrompt: "What does the card say?",

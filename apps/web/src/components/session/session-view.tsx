@@ -9,6 +9,7 @@ import {
   endSessionAction,
   recordTrialAction,
   type StartSessionResult,
+  saveSessionAffectAction,
   saveSessionNoteAction,
   startSessionAction,
 } from "@/lib/session/actions";
@@ -17,6 +18,7 @@ import { distractorForTrial } from "@/lib/session/distractors";
 import { attemptSave, recallCount, trialAdded } from "@/lib/session/session-view-logic";
 import { useSessionRunner } from "@/lib/session/use-session-runner";
 import { ladderRungs } from "@/lib/session/wait-policy";
+import { AffectScreen } from "./affect-prompt";
 import { AnswerScreen } from "./answer-screen";
 import { DistractorCard } from "./distractor-card";
 import { EndScreen } from "./end-screen";
@@ -47,6 +49,7 @@ export function SessionView({
   const [result, setResult] = useState<StartSessionResult | null>(null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [affectAsked, setAffectAsked] = useState(false);
 
   async function begin() {
     setStarting(true);
@@ -65,10 +68,27 @@ export function SessionView({
     }
   }
 
-  if (result)
+  if (result) {
+    // Pre-affect (5.4): one tap or one skip, strictly before the first probe — RunningSession
+    // (and with it the engine/timers) doesn't mount until this screen is dismissed. Resumed
+    // sessions skip it (the patient already answered when this session first began). The save is
+    // best-effort and never re-prompts: a lost affect tap is acceptable, a blocked session isn't.
+    if (!affectAsked && !result.resumed)
+      return (
+        <AffectScreen
+          onDone={(affect) => {
+            setAffectAsked(true);
+            if (affect)
+              void attemptSave(() =>
+                saveSessionAffectAction({ sessionId: result.sessionId, point: "pre", affect }),
+              );
+          }}
+        />
+      );
     return (
       <RunningSession result={result} demoSpeed={demoSpeed} distractorPrompts={distractorPrompts} />
     );
+  }
 
   return (
     <section className={KIOSK_SECTION}>
@@ -249,6 +269,9 @@ function RunningSession({
             const res = await saveSessionNoteAction({ sessionId, note });
             return res.error === null;
           }}
+          onAffect={(affect) =>
+            void attemptSave(() => saveSessionAffectAction({ sessionId, point: "post", affect }))
+          }
           onHome={() => router.push("/dashboard")}
         />
       )}

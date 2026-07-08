@@ -335,7 +335,13 @@ const tableSpecs: TableSpec[] = [
       return { error, marker };
     },
     anonInsertPayload: (g) => ({ patient_id: g.patientId, started_at: new Date().toISOString() }),
-    updatePatch: { summary: { note: "changed" } },
+    // affect_pre/affect_post (5.4) ride the same patch so the cross-tenant UPDATE denial below
+    // proves B cannot write A's affect columns, and the positive control proves the owner can.
+    updatePatch: {
+      summary: { note: "changed" },
+      affect_pre: "content",
+      affect_post: "unsettled",
+    },
   },
   {
     table: "trials",
