@@ -16,7 +16,8 @@
     "format": "biome format --write .",
     "seed": "tsx scripts/seed.ts",
     "eval:wizard": "tsx --tsconfig apps/web/tsconfig.json scripts/eval-wizard.ts",
-    "fixtures:record": "tsx --tsconfig apps/web/tsconfig.json scripts/record-fixtures.ts"
+    "fixtures:record": "tsx --tsconfig apps/web/tsconfig.json scripts/record-fixtures.ts",
+    "audio:generate": "tsx --tsconfig apps/web/tsconfig.json scripts/generate-audio.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.0",

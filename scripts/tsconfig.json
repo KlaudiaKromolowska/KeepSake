@@ -14,5 +14,12 @@
       "@/*": ["../apps/web/src/*"]
     }
   },
-  "include": ["seed.ts", "env.ts", "wizard-flow.ts", "eval-wizard.ts", "record-fixtures.ts"]
+  "include": [
+    "seed.ts",
+    "env.ts",
+    "wizard-flow.ts",
+    "eval-wizard.ts",
+    "record-fixtures.ts",
+    "generate-audio.ts"
+  ]
 }
