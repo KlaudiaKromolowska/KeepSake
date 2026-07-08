@@ -596,6 +596,115 @@ describe("full scripted session — exact trial log", () => {
   });
 });
 
+describe("interval_override (practitioner override)", () => {
+  it("sets intervalSec to the given value while in distractor (in-bounds)", () => {
+    const s = openSession1(0); // distractor@15
+    const overridden = sessionReduce(
+      frozen(s),
+      { type: "interval_override", intervalSec: 100, at: 10 },
+      config,
+    );
+    expect(overridden.phase).toBe("distractor");
+    expect(overridden.intervalSec).toBe(100);
+  });
+
+  it("clamps below base up to base, above max down to max, rounds non-integers", () => {
+    const s = frozen(openSession1(0)); // distractor@15, base 15, max 960
+    const belowBase = sessionReduce(
+      s,
+      { type: "interval_override", intervalSec: -50, at: 10 },
+      config,
+    );
+    expect(belowBase.intervalSec).toBe(config.baseIntervalSec);
+
+    const aboveMax = sessionReduce(
+      s,
+      { type: "interval_override", intervalSec: 5000, at: 10 },
+      config,
+    );
+    expect(aboveMax.intervalSec).toBe(config.maxIntervalSec);
+
+    const rounded = sessionReduce(
+      s,
+      { type: "interval_override", intervalSec: 47.6, at: 10 },
+      config,
+    );
+    expect(rounded.intervalSec).toBe(48);
+  });
+
+  it("is an identity no-op outside distractor: teach, awaiting_probe, correcting, end_on_win, ended", () => {
+    const teach = frozen(startSession(fresh(), { at: 0, timeZone: TZ }, config));
+    expect(
+      sessionReduce(teach, { type: "interval_override", intervalSec: 100, at: 5 }, config),
+    ).toBe(teach);
+
+    const awaiting = frozen(
+      sessionReduce(frozen(openSession1(0)), { type: "wait_elapsed", at: 100 }, config),
+    );
+    expect(
+      sessionReduce(awaiting, { type: "interval_override", intervalSec: 100, at: 5 }, config),
+    ).toBe(awaiting);
+
+    const correcting = frozen(probe(openSession1(0), "miss", 1000));
+    expect(
+      sessionReduce(correcting, { type: "interval_override", intervalSec: 100, at: 5 }, config),
+    ).toBe(correcting);
+
+    let endOnWin = openSession1(0);
+    endOnWin = probe(endOnWin, "miss", 1000);
+    endOnWin = frozen(sessionReduce(frozen(endOnWin), { type: "end_requested", at: 2000 }, config));
+    expect(endOnWin.phase).toBe("end_on_win");
+    expect(
+      sessionReduce(endOnWin, { type: "interval_override", intervalSec: 100, at: 5 }, config),
+    ).toBe(endOnWin);
+
+    let ended = openSession1(0);
+    ended = frozen(sessionReduce(frozen(ended), { type: "end_requested", at: 100 }, config));
+    expect(ended.phase).toBe("ended");
+    expect(
+      sessionReduce(ended, { type: "interval_override", intervalSec: 100, at: 5 }, config),
+    ).toBe(ended);
+  });
+
+  it("a recall after an overridden interval sets lastSuccessSec to the override and grows from it", () => {
+    let s = openSession1(0); // distractor@15
+    s = sessionReduce(frozen(s), { type: "interval_override", intervalSec: 50, at: 10 }, config);
+    expect(s.intervalSec).toBe(50);
+    s = probe(s, "recall", 100);
+    expect(s.progress.lastSuccessSec).toBe(50);
+    expect(s.intervalSec).toBe(100); // min(50 * growthFactor(2), max)
+  });
+
+  it("a miss after an overridden interval reverts to the pre-override lastSuccessSec, not the override", () => {
+    let s = openSession1(0); // distractor@15
+    s = probe(s, "recall", 100); // recall@15 -> lastSuccessSec 15, distractor@30
+    expect(s.progress.lastSuccessSec).toBe(15);
+    s = sessionReduce(frozen(s), { type: "interval_override", intervalSec: 500, at: 150 }, config);
+    expect(s.intervalSec).toBe(500);
+    s = probe(s, "miss", 200); // -> correcting
+    expect(s.phase).toBe("correcting");
+    expect(s.trials.at(-1)).toMatchObject({ intervalSec: 500, outcome: "miss", corrected: true });
+    s = sessionReduce(frozen(s), { type: "correction_done", at: 200 }, config);
+    expect(s.intervalSec).toBe(15); // reverted to the last real success, not the override
+  });
+
+  it("does not touch unclearRun, baseMisses, progress or trials", () => {
+    let s = openSession1(0);
+    s = probe(s, "miss", 1000);
+    s = sessionReduce(frozen(s), { type: "correction_done", at: 1000 }, config); // distractor, baseMisses 1
+    expect(s.baseMisses).toBe(1);
+    const overridden = sessionReduce(
+      frozen(s),
+      { type: "interval_override", intervalSec: 999, at: 1000 },
+      config,
+    );
+    expect(overridden.baseMisses).toBe(s.baseMisses);
+    expect(overridden.unclearRun).toBe(s.unclearRun);
+    expect(overridden.progress).toBe(s.progress);
+    expect(overridden.trials).toBe(s.trials);
+  });
+});
+
 describe("purity — inputs are never mutated (rule 12)", () => {
   it("a full run leaves every intermediate frozen state intact", () => {
     // If any transition mutated its input, freeze() would make it throw.

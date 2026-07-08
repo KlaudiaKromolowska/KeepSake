@@ -48,7 +48,8 @@ export type SessionEvent =
   | { type: "wait_elapsed"; at: number } // distractor gap finished
   | { type: "probe_result"; outcome: Outcome; at: number }
   | { type: "correction_done"; at: number } // patient repeated the answer after correction
-  | { type: "end_requested"; at: number }; // caregiver closes the session
+  | { type: "end_requested"; at: number } // caregiver closes the session
+  | { type: "interval_override"; intervalSec: number; at: number }; // practitioner adjusts the current gap
 
 export function startSession(
   progress: TargetProgress,
@@ -150,6 +151,8 @@ export function sessionReduce(
       return handleProbe(state, event.outcome, event.at, config);
     case "end_requested":
       return handleEndRequested(state);
+    case "interval_override":
+      return handleIntervalOverride(state, event.intervalSec, config);
   }
 }
 
@@ -181,6 +184,24 @@ function handleWaitElapsed(state: SessionState): SessionState {
   // A gap that was allowed to start is always followed by its probe — the retrieval attempt is the
   // clinical payload (§8b: intervals are content timing, not UI timing). The cap gates the next gap.
   return { ...state, phase: "awaiting_probe" };
+}
+
+/**
+ * Practitioner-requested manual override of the gap currently being waited out (valid only in
+ * `distractor`; a no-op everywhere else). Moves the current rung only — `unclearRun`, `baseMisses`,
+ * `progress` and `trials` are untouched; provenance logging is the web layer's job.
+ */
+function handleIntervalOverride(
+  state: SessionState,
+  intervalSec: number,
+  config: SrConfig,
+): SessionState {
+  if (state.phase !== "distractor") return state;
+  const clamped = Math.min(
+    Math.max(Math.round(intervalSec), config.baseIntervalSec),
+    config.maxIntervalSec,
+  );
+  return { ...state, intervalSec: clamped };
 }
 
 function handleCorrectionDone(state: SessionState, at: number, config: SrConfig): SessionState {
