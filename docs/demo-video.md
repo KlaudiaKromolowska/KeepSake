@@ -16,6 +16,10 @@
 | 2:50 | Close | Marta says "Lena." | "The caregiver never touched a stopwatch, never had to correct her mother, never saw a red X — and the field gets data it has never had." |
 
 ## Daily log
+- **Jul 8 (D2):** running a day ahead — Phase 3 (kiosk UI) built today instead of D3. Session
+  beat (1:05–1:50) is now shootable against the real UI: probe → deliberate miss → device
+  correction → interval clock visible through the real first 15s → recovery. edge-tts pre-gen
+  verified working (two sample lines generated; audition pending — see `tts-decision.md`).
 - **Jul 7 (D1):** v0 — script seeded from PLAN §16.4. Assets not started (due D2–D5, §16.2).
 - **Jul 7 (D1, pm):** v1 — pitch inverted to science-forward (PLAN §1b Reframe #0): field's
   problem opens, Marta becomes the humane-deployment proof, RCT-in-a-box elevated to the 45s
@@ -23,6 +27,7 @@
 
 ## Open items
 - [ ] Persona photos (Marta, Lena, cluttered group shot + clean crop)
-- [ ] TTS voice decision (D2) — pre-gen lines for the film
+- [x] TTS voice decision (D2) — edge-tts pre-gen verified; per-line voice audition (Aria vs
+  Ava) still open, full line set due with §16.2 assets
 - [ ] SLP cameo confirmed or card+quote fallback
 - [ ] Music bed choice + license check

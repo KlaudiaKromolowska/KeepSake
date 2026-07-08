@@ -51,6 +51,11 @@ worth it for MVP; revisit with a paid TTS API in V1 if caregiver feedback flags 
 
 **Verified:** `edge-tts` (github.com/rany2/edge-tts) is active, free, requires no API
 key or Microsoft account — it calls the same backend as Edge's "Read Aloud" feature.
+**Pre-gen tested (Jul 8, D2):** `pip install edge-tts` + the workflow below ran clean on
+the dev machine — two sample lines generated (`en-US-AriaNeural` correction line,
+`en-US-AvaNeural` encouragement line, `--rate=-10%`). Files land as real MPEG audio
+(~25–30KB per short line). Remaining human step: audition both voices, pick per-line
+before the D5–D6 asset pass (§16.2).
 Verified OpenAI `tts-1` pricing ($15/1M chars) and ElevenLabs free-tier terms (10k
 chars/mo, non-commercial, 2,500-char request cap) via current vendor docs, July 2026.
 
