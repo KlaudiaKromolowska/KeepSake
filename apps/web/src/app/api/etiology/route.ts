@@ -65,7 +65,9 @@ export async function POST(): Promise<Response> {
     schema: etiologyRecSchema,
     reconcile: (modelRec) => reconcileEtiologyRec(etiology, modelRec),
     maxTokens: 2048,
-    effort: "medium",
+    // High on purpose: adaptive thinking skips visible reasoning at medium effort on this small
+    // task, and the streamed reasoning IS the surface (§1b #8) — verified empty at medium.
+    effort: "high",
   });
 
   return new Response(stream, {

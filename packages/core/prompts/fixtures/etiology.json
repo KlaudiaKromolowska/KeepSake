@@ -1,10 +1,9 @@
 {
-  "_note": "HAND-AUTHORED PLACEHOLDER — not a live recording. Re-record with `pnpm fixtures:record etiology` against a live API + seeded demo patient. Shape matches streamThinkingJson's fixture branch: { thinking, recommendation }. 'recommendation' is the RAW model rec (validated against etiologyRecSchema); the route reconciles it against the deterministic mapping at serve time.",
-  "thinking": "The condition on file here is Lewy body dementia. That matters a lot for how we ask this question. In Lewy body dementia, pulling a fact up from nowhere — free recall — tends to be the hardest kind of task and the one most likely to end in an anxious, empty pause. What holds up much better is recognition: showing a few options and letting the person point to the one that feels right. The recognition memory is more spared, and choosing from options carries far less pressure than producing the answer cold.\n\nSo for this target I'd lean toward a recognition-style probe rather than free recall. I'd also keep the wait after asking fairly short and gentle — a long silence is where frustration builds — and offer a familiar cue alongside the options, like a photo or a spoken first sound, to make the right choice easy to land on. The aim is always a calm, successful moment, and recognition is the format most likely to give that here.",
+  "thinking": "For someone with Alzheimer's, free recall is the right approach here since the granddaughter's name is personally meaningful and well-established in long-term memory—it's the kind of episodic detail that tends to be preserved. Keeping the current free recall format makes sense and provides consistency.",
   "recommendation": {
-    "answerFormat": "recognition",
-    "responseWindow": "keep it short and gentle — a few seconds, then offer the options",
-    "cueModality": "a familiar picture or a spoken first-sound cue alongside the choices",
-    "why": "recognition is more spared than free recall in Lewy body dementia, so choosing from options is calmer and more likely to succeed."
+    "answerFormat": "free_recall",
+    "responseWindow": "a few quiet seconds, unhurried",
+    "cueModality": "personal/relationship cue (e.g. a photo or gentle reminder of who she is)",
+    "why": "Alzheimer's profiles generally respond well to free recall, especially for a warmly familiar personal detail like a granddaughter's name."
   }
 }

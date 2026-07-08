@@ -444,7 +444,7 @@ async function recordEtiology(
     schema: etiologyRecSchema,
     reconcile: (r) => r,
     maxTokens: 2048,
-    effort: "medium",
+    effort: "high",
   });
   const out = await readStream(stream);
   const idx = out.lastIndexOf(STREAM_JSON_SENTINEL);
