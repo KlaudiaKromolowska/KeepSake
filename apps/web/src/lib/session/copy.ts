@@ -12,6 +12,13 @@ export const SESSION_COPY = {
     miss: "Not this time",
     unclear: "Couldn't tell",
   },
+  speech: {
+    listening: "Listening…",
+    checking: "Checking what we heard…",
+    heardRecall: "It sounded like they remembered — tap to confirm.",
+    heardMiss: "That didn't sound quite like the answer — you know best.",
+    suggested: "Suggested",
+  },
   teach: {
     heading: "Let's learn this together",
     instruction: "Read the answer out loud together.",
@@ -46,6 +53,15 @@ export const SESSION_COPY = {
     notesSave: "Save note",
     notesSaved: "Saved",
     home: "Back to home",
+  },
+  affect: {
+    preHeading: "Before we begin",
+    preQuestion: "How are you feeling right now?",
+    postQuestion: "And how are you feeling now?",
+    content: "Feeling good",
+    unsettled: "A bit unsettled",
+    skip: "Skip this",
+    thanks: "Thank you for sharing.",
   },
   annotations: {
     answerCard: "Answer card",

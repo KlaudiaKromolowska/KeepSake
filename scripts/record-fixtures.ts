@@ -150,6 +150,40 @@ async function recordDistractors(admin: Admin, patientId: string): Promise<void>
   console.error("record-fixtures: distractors — recorded");
 }
 
+// --- grade (V1 speech assist — Haiku recall grader) --------------------------------------------
+
+async function recordGrade(admin: Admin, patientId: string): Promise<void> {
+  const { data: target } = await admin
+    .from("targets")
+    .select("question, answer, accepted_variants")
+    .eq("patient_id", patientId)
+    .in("status", ["active", "maintenance"])
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!target) throw new Error("no seeded active/maintenance target found for demo patient");
+
+  const { buildGradePrompt, GRADE_SYSTEM } = await import("@keepsake/core/prompts/grade");
+  const { gradeVerdictSchema, aliasesFromJson } = await import("@/lib/session/grade-schema");
+  // A genuinely ambiguous, hesitant utterance — the band that reaches Haiku in the live path.
+  const result = await generateStructured({
+    kind: "grade",
+    schema: gradeVerdictSchema,
+    system: GRADE_SYSTEM,
+    user: buildGradePrompt({
+      question: target.question,
+      answer: target.answer,
+      aliases: aliasesFromJson(target.accepted_variants),
+      transcript: "oh dear, I want to say it... it's on the tip of my tongue",
+      locale: "en",
+    }),
+    model: "claude-haiku-4-5",
+    maxTokens: 256,
+  });
+  writeStructuredFixture("grade", result);
+  console.error("record-fixtures: grade — recorded");
+}
+
 // --- vision (skip if no seeded photo asset) -------------------------------------------------
 
 async function recordVision(admin: Admin, patientId: string): Promise<"recorded" | "skipped"> {
@@ -380,7 +414,7 @@ async function recordRct(
 
 // --- main -------------------------------------------------------------------------------------
 
-const ALL_KINDS = ["wizard", "distractors", "vision", "debrief", "rct"];
+const ALL_KINDS = ["wizard", "distractors", "grade", "vision", "debrief", "rct"];
 
 async function main(): Promise<void> {
   loadWebEnv();
@@ -407,6 +441,7 @@ async function main(): Promise<void> {
 
   if (kinds.has("wizard")) await recordWizard();
   if (kinds.has("distractors")) await recordDistractors(admin, patient.id);
+  if (kinds.has("grade")) await recordGrade(admin, patient.id);
   if (kinds.has("vision")) await recordVision(admin, patient.id);
   if (kinds.has("debrief")) await recordDebrief(admin, patient.id);
   if (kinds.has("rct")) await recordRct(admin, patient);

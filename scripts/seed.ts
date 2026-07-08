@@ -484,7 +484,6 @@ async function seed(): Promise<void> {
 
   const arc = driveArc();
 
-  const affect = [3, 4] as const; // plausible constant pre/post affect rating (1-5 scale)
   let trialCount = 0;
   for (const [i, session] of arc.sessions.entries()) {
     const { data: sessionRow, error: sessionErr } = await admin
@@ -493,8 +492,9 @@ async function seed(): Promise<void> {
         patient_id: patientId,
         started_at: new Date(session.startedAt).toISOString(),
         ended_at: new Date(session.endedAt).toISOString(),
-        patient_affect_pre: affect[0],
-        patient_affect_post: affect[1],
+        // plausible constant two-tap affect (5.4): settled coming in, settled going out
+        affect_pre: "content",
+        affect_post: "content",
         summary: null,
       })
       .select("id")
