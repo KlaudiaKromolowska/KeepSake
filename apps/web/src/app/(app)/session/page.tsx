@@ -67,10 +67,14 @@ export default async function SessionPage() {
 
   // Fetched once per page load (not per session/trial) so a slow or failing Claude call never
   // blocks or breaks the kiosk flow — any failure here is swallowed and SessionView falls back to
-  // the static distractor list.
+  // the static distractor list. Hard 3s budget: the live call took 3–17s in gate testing, and the
+  // kiosk page must never feel broken while a nice-to-have personalization loads.
   let distractorPrompts: string[] | undefined;
   try {
-    const { data } = await personalizedDistractorsAction();
+    const timeout = new Promise<{ data: null }>((resolve) =>
+      setTimeout(() => resolve({ data: null }), 3_000),
+    );
+    const { data } = await Promise.race([personalizedDistractorsAction(), timeout]);
     if (data) distractorPrompts = data;
   } catch {
     distractorPrompts = undefined;
