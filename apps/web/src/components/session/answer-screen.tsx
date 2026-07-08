@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { useState } from "react";
 import { SESSION_COPY } from "@/lib/session/copy";
 
 export type AnswerVariant = "teach" | "correction" | "end_on_win";
@@ -38,6 +39,7 @@ export function AnswerScreen({
   onDone: () => void;
 }) {
   const copy = VARIANT_COPY[variant];
+  const [imageFailed, setImageFailed] = useState(false);
 
   return (
     <section className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-white px-6 text-center text-zinc-900">
@@ -47,13 +49,14 @@ export function AnswerScreen({
       {copy.reassurance && <p className="text-2xl text-zinc-700">{copy.reassurance}</p>}
       <p className="text-3xl text-zinc-700">{question}</p>
       <p className="text-7xl font-bold">{answer}</p>
-      {imageUrl && (
+      {imageUrl && !imageFailed && (
         <Image
           src={imageUrl}
           alt={question}
           width={480}
           height={480}
           className="max-h-[40vh] w-auto rounded-3xl object-contain"
+          onError={() => setImageFailed(true)}
         />
       )}
       <p className="text-2xl text-zinc-700">{copy.instruction}</p>

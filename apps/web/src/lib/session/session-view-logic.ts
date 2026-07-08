@@ -1,7 +1,17 @@
 import type { SessionPhase, SessionState, TrialRecord } from "@keepsake/core/sr";
+import type { ActionResult } from "@/lib/actions";
 
 /** Which screen a phase renders — the discriminant SessionView switches on. */
 export type Screen = "teach" | "probe" | "correction" | "distractor" | "end_on_win" | "ended";
+
+/** Runs a save action; failure = ActionResult error OR thrown rejection. */
+export async function attemptSave(fn: () => Promise<ActionResult<null>>): Promise<boolean> {
+  try {
+    return (await fn()).error === null;
+  } catch {
+    return false;
+  }
+}
 
 /** True when `next` gained a trial vs `prev` — the trigger to persist the latest trial. */
 export function trialAdded(prev: SessionState, next: SessionState): boolean {

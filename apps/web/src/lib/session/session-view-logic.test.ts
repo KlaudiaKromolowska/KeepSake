@@ -1,6 +1,7 @@
 import type { SessionState } from "@keepsake/core/sr";
 import { describe, expect, it } from "vitest";
-import { recallCount, screenForPhase, trialAdded } from "./session-view-logic";
+import type { ActionResult } from "@/lib/actions";
+import { attemptSave, recallCount, screenForPhase, trialAdded } from "./session-view-logic";
 
 /** Minimal SessionState stub — only the fields these pure helpers read. */
 function state(overrides: Partial<SessionState> = {}): SessionState {
@@ -66,6 +67,25 @@ describe("recallCount", () => {
 
   it("is 0 for an empty trial list", () => {
     expect(recallCount([])).toBe(0);
+  });
+});
+
+describe("attemptSave", () => {
+  it("returns true when the action resolves with no error", async () => {
+    const fn = async (): Promise<ActionResult<null>> => ({ data: null, error: null });
+    expect(await attemptSave(fn)).toBe(true);
+  });
+
+  it("returns false when the action resolves with an error", async () => {
+    const fn = async (): Promise<ActionResult<null>> => ({ data: null, error: "boom" });
+    expect(await attemptSave(fn)).toBe(false);
+  });
+
+  it("returns false — not a throw — when the action rejects", async () => {
+    const fn = async (): Promise<ActionResult<null>> => {
+      throw new Error("network drop");
+    };
+    await expect(attemptSave(fn)).resolves.toBe(false);
   });
 });
 

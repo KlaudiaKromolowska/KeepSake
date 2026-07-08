@@ -14,7 +14,7 @@ import {
 } from "@/lib/session/actions";
 import { SESSION_COPY } from "@/lib/session/copy";
 import { distractorForTrial } from "@/lib/session/distractors";
-import { recallCount, trialAdded } from "@/lib/session/session-view-logic";
+import { attemptSave, recallCount, trialAdded } from "@/lib/session/session-view-logic";
 import { useSessionRunner } from "@/lib/session/use-session-runner";
 import { ladderRungs } from "@/lib/session/wait-policy";
 import { AnswerScreen } from "./answer-screen";
@@ -49,13 +49,18 @@ export function SessionView({
   async function begin() {
     setStarting(true);
     setStartError(null);
-    const res = await startSessionAction({ targetId });
-    if (res.error !== null) {
-      setStartError(res.error);
+    try {
+      const res = await startSessionAction({ targetId });
+      if (res.error !== null) {
+        setStartError(res.error);
+        setStarting(false);
+        return;
+      }
+      setResult(res.data);
+    } catch {
+      setStartError(SESSION_COPY.preSession.startError);
       setStarting(false);
-      return;
     }
-    setResult(res.data);
   }
 
   if (result) return <RunningSession result={result} demoSpeed={demoSpeed} />;
@@ -94,8 +99,7 @@ function RunningSession({ result, demoSpeed }: { result: StartSessionResult; dem
   const [pendingSaves, setPendingSaves] = useState(0);
 
   const runFailable = useCallback(async (fn: () => Promise<ActionResult<null>>) => {
-    const res = await fn();
-    if (res.error !== null) {
+    if (!(await attemptSave(fn))) {
       retryQueueRef.current.push(fn);
       setPendingSaves(retryQueueRef.current.length);
     }
@@ -106,8 +110,7 @@ function RunningSession({ result, demoSpeed }: { result: StartSessionResult; dem
     retryQueueRef.current = [];
     setPendingSaves(0);
     for (const fn of items) {
-      const res = await fn();
-      if (res.error !== null) retryQueueRef.current.push(fn);
+      if (!(await attemptSave(fn))) retryQueueRef.current.push(fn);
     }
     setPendingSaves(retryQueueRef.current.length);
   }, []);
@@ -248,11 +251,19 @@ function SessionFooter({ sessionId, onEnd }: { sessionId: string; onEnd: () => v
   const [cardOpen, setCardOpen] = useState(false);
   const [cardText, setCardText] = useState("");
   const [saved, setSaved] = useState(false);
+  const [cardError, setCardError] = useState(false);
 
   async function logCard() {
     const note = cardText.trim();
     if (note === "") return;
-    await annotateSessionAction({ sessionId, kind: "answer_card", note, at: Date.now() });
+    setCardError(false);
+    const ok = await attemptSave(() =>
+      annotateSessionAction({ sessionId, kind: "answer_card", note, at: Date.now() }),
+    );
+    if (!ok) {
+      setCardError(true);
+      return;
+    }
     setCardText("");
     setCardOpen(false);
     setSaved(true);
@@ -274,6 +285,7 @@ function SessionFooter({ sessionId, onEnd }: { sessionId: string; onEnd: () => v
           onClick={() => {
             setCardOpen((open) => !open);
             setSaved(false);
+            setCardError(false);
           }}
           className="min-h-[64px] rounded-2xl border-2 border-zinc-500 bg-zinc-50 px-8 text-2xl font-medium text-zinc-900 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
         >
@@ -305,6 +317,11 @@ function SessionFooter({ sessionId, onEnd }: { sessionId: string; onEnd: () => v
           >
             {SESSION_COPY.annotations.answerCardSave}
           </button>
+          {cardError && (
+            <p role="alert" className="text-xl text-zinc-900">
+              {SESSION_COPY.shared.saveError}
+            </p>
+          )}
         </div>
       )}
     </footer>
