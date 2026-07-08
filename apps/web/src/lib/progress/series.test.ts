@@ -196,8 +196,10 @@ describe("describeAcquisition", () => {
     );
     const text = describeAcquisition([point("2026-07-03", 240), point("2026-07-04", 60)], 960);
     expect(text).toContain(
-      "Across 2 practice sessions (Jul 3 – Jul 4), the longest delay recalled went from 4 min to 1 min.",
+      "Across 2 practice sessions (Jul 3 – Jul 4), the longest delay recalled has reached 4 min at its best",
     );
-    expect(text).toContain("dips are a normal part of spaced practice");
+    expect(text).not.toMatch(/went from|down to/);
+    // The reassurance lives inside the moved sentence — it must not repeat as a second line.
+    expect((text ?? "").match(/comfortable step/g)).toHaveLength(1);
   });
 });

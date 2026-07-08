@@ -29,8 +29,8 @@ export const PROGRESS_COPY = {
       `Across ${n} practice sessions (${firstDay} – ${lastDay}), the longest delay recalled grew from ${from} to ${to}.`,
     held: (n: number, firstDay: string, lastDay: string, at: string) =>
       `Across ${n} practice sessions (${firstDay} – ${lastDay}), the longest delay recalled has held steady at ${at}.`,
-    moved: (n: number, firstDay: string, lastDay: string, from: string, to: string) =>
-      `Across ${n} practice sessions (${firstDay} – ${lastDay}), the longest delay recalled went from ${from} to ${to}.`,
+    moved: (n: number, firstDay: string, lastDay: string, best: string) =>
+      `Across ${n} practice sessions (${firstDay} – ${lastDay}), the longest delay recalled has reached ${best} at its best — dips are a normal part of spaced practice, and the next session rebuilds from a comfortable step.`,
     rebuilding: (best: string) =>
       `The best delay so far is ${best} — dips are a normal part of spaced practice, and the next session rebuilds from a comfortable step.`,
     reminders: (k: number) =>
