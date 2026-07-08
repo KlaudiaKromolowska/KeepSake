@@ -4,20 +4,22 @@ import { expect, type Page, test } from "@playwright/test";
  * Smoke E2E of the never-cut demo chain (Revised_plan.md Day-3 Track A): demo-login → target
  * wizard (typed path) → session (recall, miss + errorless correction, unclear) → debrief → RCT
  * report. Asserts headings/state transitions render, not pixels. Requires:
- *  - the local Supabase stack seeded (`pnpm seed`) — provides the demo caregiver + an already
- *    active "Lena" target with 5 days of prior trial history (scripts/seed.ts),
+ *  - the local Supabase stack seeded (`pnpm seed`) — provides the demo caregiver and three targets
+ *    (scripts/seed.ts): "Lena" and "Kraków" mastered on their booster loops, plus a still-acquiring
+ *    "Ewa" that holds the single acquisition slot. The kiosk opens a session on the acquisition
+ *    target (selectSessionTarget prioritises it over the mastered boosters), so this test always
+ *    lands on a real start-probe → climb session — never a booster check-in that ends on one win,
  *  - DEMO_MODE=1 + DEMO_CAREGIVER_PASSWORD set (enables the one-tap demo login), and
  *  - CLAUDE_FIXTURES=1 so every AI call (wizard/debrief/rct) replays a recorded fixture
  *    (packages/core/prompts/fixtures/*.json) instead of hitting the real Claude API.
  *
- * Distractor waits: the seeded target's last successful interval is already at the 960s ceiling,
- * so a fresh distractor gap opens huge. Rather than patching the engine or waiting it out, this
- * test uses the same "Adjust wait" control a caregiver has in the real kiosk (DistractorCard) to
- * collapse the gap to its floor rung (15s — DEFAULT_SR_CONFIG.baseIntervalSec; the seeded demo
- * patient is "alzheimers", whose etiology tuning only overrides growthFactor, not baseIntervalSec —
- * packages/core/src/sr/etiology.ts) — the smallest legitimate mechanism already in the app. Waits
- * at or under 60s always play in real time (REALTIME_MAX_SEC, wait-policy.ts) regardless of
- * DEMO_SPEED.
+ * Distractor waits: the acquiring target sits at the base rung (15s — DEFAULT_SR_CONFIG.
+ * baseIntervalSec; the seeded demo patient is "alzheimers", whose etiology tuning only overrides
+ * growthFactor, not baseIntervalSec — packages/core/src/sr/etiology.ts), so each gap already plays
+ * in real time (≤ 60s always plays live regardless of DEMO_SPEED — REALTIME_MAX_SEC, wait-policy.ts).
+ * The test still exercises the kiosk's "Adjust wait" control (DistractorCard) before each probe to
+ * pin the gap to that floor rung — the same legitimate mechanism a caregiver has, and the path the
+ * demo/film relies on when a target's gaps are large.
  */
 test("demo login → wizard → session → debrief → RCT report", async ({ page }) => {
   // 1. Demo login
@@ -41,7 +43,8 @@ test("demo login → wizard → session → debrief → RCT report", async ({ pa
   await page.getByRole("button", { name: "Back to home" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
 
-  // 3. Session — the seeded target is the oldest active one, so it's the one the kiosk picks up
+  // 3. Session — the kiosk opens on the acquisition-slot target ("Ewa"), which wins selection over
+  // the two mastered boosters and over the just-created wizard target (queued behind it).
   await page.getByRole("link", { name: /Start today's session/ }).click();
   await expect(page).toHaveURL(/\/session$/);
   await page

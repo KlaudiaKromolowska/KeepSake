@@ -33,7 +33,7 @@ const { readFileMock } = vi.hoisted(() => ({ readFileMock: vi.fn() }));
 vi.mock("node:fs/promises", () => ({ readFile: readFileMock }));
 
 import { generateStructured } from "@/lib/ai/core";
-import { qaPhotoAction } from "./vision-actions";
+import { qaPhotoAction, uploadTargetPhotoAction } from "./vision-actions";
 
 const goodResult: PhotoQaResult = { verdict: "good", reasons: [], cropAdvice: null };
 const needsWorkResult: PhotoQaResult = {
@@ -120,5 +120,96 @@ describe("qaPhotoAction", () => {
     const res = await qaPhotoAction({ imagePath: "/images/lena.jpg" });
     expect(res.data).toBeNull();
     expect(res.error).not.toMatch(/secret internal/);
+  });
+});
+
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+const GIF = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
+const makeFile = (bytes: Uint8Array = PNG, type = "image/png") =>
+  new File([bytes as BlobPart], "photo.png", { type });
+const withPhoto = (file: File | null, extra: Record<string, string> = {}) => {
+  const fd = new FormData();
+  if (file) fd.append("photo", file);
+  for (const [k, v] of Object.entries(extra)) fd.append(k, v);
+  return fd;
+};
+
+describe("uploadTargetPhotoAction", () => {
+  let uploadMock: ReturnType<typeof vi.fn>;
+  let removeMock: ReturnType<typeof vi.fn>;
+  let fromMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    uploadMock = vi.fn().mockResolvedValue({ data: { path: "p" }, error: null });
+    removeMock = vi.fn().mockResolvedValue({ data: null, error: null });
+    fromMock = vi.fn(() => ({ upload: uploadMock, remove: removeMock }));
+    requireUserMock.mockResolvedValue({
+      user: { id: "u1" },
+      supabase: { storage: { from: fromMock } },
+    });
+  });
+
+  it("rejects a spoofed/non-image file before touching storage or the model", async () => {
+    const res = await uploadTargetPhotoAction(withPhoto(makeFile(GIF, "image/png")));
+    expect(res.data).toBeNull();
+    expect(res.error).toMatch(/JPG, PNG, or WebP/i);
+    expect(uploadMock).not.toHaveBeenCalled();
+    expect(generateStructured).not.toHaveBeenCalled();
+  });
+
+  it("rejects a request with no photo field", async () => {
+    const res = await uploadTargetPhotoAction(withPhoto(null));
+    expect(res.data).toBeNull();
+    expect(uploadMock).not.toHaveBeenCalled();
+  });
+
+  it("uploads under the caregiver's own uid folder and returns the QA verdict", async () => {
+    generateStructuredMock.mockResolvedValueOnce(goodResult);
+    const res = await uploadTargetPhotoAction(withPhoto(makeFile()));
+    expect(res.error).toBeNull();
+    expect(res.data?.qa).toEqual(goodResult);
+    expect(res.data?.path).toMatch(/^u1\/[\w-]+\.png$/);
+
+    expect(fromMock).toHaveBeenCalledWith("target-photos");
+    const [path, body, opts] = uploadMock.mock.calls[0];
+    expect(path).toBe(res.data?.path);
+    expect(body).toBeInstanceOf(Uint8Array);
+    expect(opts).toMatchObject({ contentType: "image/png", upsert: false });
+  });
+
+  it("passes the memory target through for crop advice", async () => {
+    generateStructuredMock.mockResolvedValueOnce(needsWorkResult);
+    await uploadTargetPhotoAction(
+      withPhoto(makeFile(), { question: "Who is this?", answer: "Lena" }),
+    );
+    const text = generateStructuredMock.mock.calls[0][0].user[1].text as string;
+    expect(text).toContain("Who is this?");
+    expect(text).toContain("Lena");
+  });
+
+  it("does not upload or call the model when quota is exhausted", async () => {
+    assertAiQuotaMock.mockRejectedValueOnce(new QuotaError("limit"));
+    const res = await uploadTargetPhotoAction(withPhoto(makeFile()));
+    expect(res.error).toMatch(/paused/i);
+    expect(uploadMock).not.toHaveBeenCalled();
+    expect(generateStructured).not.toHaveBeenCalled();
+  });
+
+  it("returns a calm error when storage upload fails, without calling the model", async () => {
+    uploadMock.mockResolvedValueOnce({ data: null, error: { message: "bucket boom" } });
+    const res = await uploadTargetPhotoAction(withPhoto(makeFile()));
+    expect(res.data).toBeNull();
+    expect(res.error).not.toMatch(/bucket boom/);
+    expect(generateStructured).not.toHaveBeenCalled();
+  });
+
+  it("removes the stored object and returns a calm error when QA fails after upload", async () => {
+    generateStructuredMock.mockRejectedValueOnce(new AiUnavailableError("secret internal detail"));
+    const res = await uploadTargetPhotoAction(withPhoto(makeFile()));
+    expect(res.data).toBeNull();
+    expect(res.error).not.toMatch(/secret internal/);
+    expect(removeMock).toHaveBeenCalledTimes(1);
+    const uploadedPath = uploadMock.mock.calls[0][0];
+    expect(removeMock).toHaveBeenCalledWith([uploadedPath]);
   });
 });

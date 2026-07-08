@@ -12,9 +12,11 @@ import {
   startSession,
   type TargetProgress,
 } from "@keepsake/core/sr";
+import type { z } from "zod";
 import type { ActionResult } from "@/lib/actions";
 import { failAction, requireUser } from "@/lib/actions";
 import type { Json, Tables, TablesInsert } from "@/lib/supabase/database.types";
+import { PRACTICABLE_STATUSES } from "@/lib/targets/queue";
 import { aliasesFromJson } from "./grade-schema";
 import {
   annotateSessionInputSchema,
@@ -43,7 +45,19 @@ export interface StartSessionResult {
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
-const zerr = (issues: { message: string }[]) => issues.map((i) => i.message).join("; ");
+
+/**
+ * Input/snapshot failed zod validation — a silent drop here previously meant a session just
+ * stopped persisting with no server-side trace. Log field paths + issue codes only (never the
+ * rejected values — GDPR Art. 9 data minimization), then return the user-facing message join.
+ */
+function zerr(issues: z.ZodIssue[]): string {
+  console.error(
+    "session schema validation failed",
+    issues.map((i) => ({ path: i.path.join("."), code: i.code })),
+  );
+  return issues.map((i) => i.message).join("; ");
+}
 
 /** Non-array JSON object → a shallow-cloneable record; anything else → {}. Never throws. */
 function asRecord(json: Json | null | undefined): Record<string, unknown> {
@@ -94,7 +108,10 @@ export async function startSessionAction(
   if (targetErr || !target) {
     return failAction("startSession: target lookup", targetErr, "Target not found.");
   }
-  if (target.status !== "active" && target.status !== "maintenance") {
+  // Practicable = acquiring ("active") OR in the post-mastery booster loop ("mastered"/
+  // "maintenance"). A mastered target must be startable so its boosters can run in parallel (V2
+  // multi-target); only "draft"/"paused"/"retired" are turned away here.
+  if (!(PRACTICABLE_STATUSES as readonly string[]).includes(target.status)) {
     return { data: null, error: "This target is not ready to practice." };
   }
 

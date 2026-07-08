@@ -20,6 +20,8 @@
     "wizard-flow.ts",
     "eval-wizard.ts",
     "record-fixtures.ts",
-    "generate-audio.ts"
+    "generate-audio.ts",
+    "simulate.ts",
+    "svg-chart.ts"
   ]
 }

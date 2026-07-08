@@ -1,0 +1,195 @@
+{
+  "meta": {
+    "n": 1000,
+    "seed": 42,
+    "horizonDays": 90,
+    "generatedAt": "2026-07-08T20:38:27.154Z",
+    "simulationRuntimeMs": 965
+  },
+  "overall": {
+    "candidacyPassRate": 0.43,
+    "statusCounts": {
+      "not_candidate": 568,
+      "acquiring": 25,
+      "mastered": 262,
+      "rescoped": 145
+    },
+    "timeToMasteryDays": {
+      "n": 262,
+      "meanDays": 29.5,
+      "p10": 6.5,
+      "p25": 13.75,
+      "p50": 23.25,
+      "p75": 40.75,
+      "p90": 60.5,
+      "minDays": 3,
+      "maxDays": 89.09
+    }
+  },
+  "perEtiology": [
+    {
+      "etiology": "alzheimers",
+      "n": 164,
+      "candidacyPassRate": 0.53,
+      "masteredRateOfCandidates": 0.61,
+      "rescopedRateOfCandidates": 0.32,
+      "timeToMasteryDays": {
+        "n": 53,
+        "meanDays": 27.38,
+        "p10": 6,
+        "p25": 13.09375,
+        "p50": 23,
+        "p75": 34.75,
+        "p90": 60.25,
+        "minDays": 3,
+        "maxDays": 84.75
+      }
+    },
+    {
+      "etiology": "lewy",
+      "n": 159,
+      "candidacyPassRate": 0.28,
+      "masteredRateOfCandidates": 0.76,
+      "rescopedRateOfCandidates": 0.16,
+      "timeToMasteryDays": {
+        "n": 34,
+        "meanDays": 27.67,
+        "p10": 6.5,
+        "p25": 16.75,
+        "p50": 20.25,
+        "p75": 41.5,
+        "p90": 54.75,
+        "minDays": 4,
+        "maxDays": 65.5
+      }
+    },
+    {
+      "etiology": "mixed",
+      "n": 164,
+      "candidacyPassRate": 0.41,
+      "masteredRateOfCandidates": 0.59,
+      "rescopedRateOfCandidates": 0.41,
+      "timeToMasteryDays": {
+        "n": 40,
+        "meanDays": 29.12,
+        "p10": 6,
+        "p25": 15.5,
+        "p50": 22.75,
+        "p75": 43.75,
+        "p90": 56.3125,
+        "minDays": 3.5,
+        "maxDays": 88.31
+      }
+    },
+    {
+      "etiology": "parkinsons",
+      "n": 171,
+      "candidacyPassRate": 0.36,
+      "masteredRateOfCandidates": 0.74,
+      "rescopedRateOfCandidates": 0.24,
+      "timeToMasteryDays": {
+        "n": 46,
+        "meanDays": 24.64,
+        "p10": 4.5,
+        "p25": 11.25,
+        "p50": 19,
+        "p75": 30.25,
+        "p90": 67.75,
+        "minDays": 3,
+        "maxDays": 85.13
+      }
+    },
+    {
+      "etiology": "unspecified",
+      "n": 158,
+      "candidacyPassRate": 0.52,
+      "masteredRateOfCandidates": 0.44,
+      "rescopedRateOfCandidates": 0.45,
+      "timeToMasteryDays": {
+        "n": 36,
+        "meanDays": 32.74,
+        "p10": 11,
+        "p25": 20.75,
+        "p50": 27.25,
+        "p75": 40.5,
+        "p90": 65.25,
+        "minDays": 6.5,
+        "maxDays": 88.59
+      }
+    },
+    {
+      "etiology": "vascular",
+      "n": 184,
+      "candidacyPassRate": 0.48,
+      "masteredRateOfCandidates": 0.6,
+      "rescopedRateOfCandidates": 0.34,
+      "timeToMasteryDays": {
+        "n": 53,
+        "meanDays": 35.11,
+        "p10": 6.75,
+        "p25": 18.25,
+        "p50": 30.75,
+        "p75": 46.5,
+        "p90": 71.8125,
+        "minDays": 3.5,
+        "maxDays": 89.09
+      }
+    }
+  ],
+  "boosterSurvival": [
+    {
+      "cadenceDaysNominal": 7,
+      "n": 1444,
+      "recallRate": 0.82
+    },
+    {
+      "cadenceDaysNominal": 14,
+      "n": 165,
+      "recallRate": 0.73
+    },
+    {
+      "cadenceDaysNominal": 30,
+      "n": 54,
+      "recallRate": 0.83
+    },
+    {
+      "cadenceDaysNominal": 90,
+      "n": 0,
+      "recallRate": 0
+    }
+  ],
+  "withinSessionIntervalHistogram": [
+    {
+      "label": "0-10s",
+      "count": 0
+    },
+    {
+      "label": "10-20s",
+      "count": 1910
+    },
+    {
+      "label": "20-40s",
+      "count": 9074
+    },
+    {
+      "label": "40-80s",
+      "count": 10402
+    },
+    {
+      "label": "80-160s",
+      "count": 6895
+    },
+    {
+      "label": "160-320s",
+      "count": 7237
+    },
+    {
+      "label": "320-640s",
+      "count": 6530
+    },
+    {
+      "label": "640-1000s",
+      "count": 7854
+    }
+  ]
+}

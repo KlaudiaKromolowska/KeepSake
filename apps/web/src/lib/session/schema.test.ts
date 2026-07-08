@@ -1,14 +1,20 @@
-import { defaultsForEtiology, startSession } from "@keepsake/core/sr";
+import { defaultsForEtiology, nextIntervalSec, startSession } from "@keepsake/core/sr";
 import { describe, expect, it } from "vitest";
 import {
   annotateSessionInputSchema,
   saveSessionAffectInputSchema,
   saveSessionNoteInputSchema,
   sessionStateSchema,
+  targetProgressSchema,
   trialRecordSchema,
 } from "./schema";
 
 const config = defaultsForEtiology("alzheimers").config;
+
+// The alzheimers etiology default (growthFactor 1.5) produces fractional ladder rungs
+// (15 → 22.5 → ...). Derived from the real config so this test breaks if the defaults change
+// and stop exercising the non-integer case — regression for the fractional-rung save drop.
+const fractionalRungSec = nextIntervalSec(config.baseIntervalSec, config);
 
 function freshState() {
   return startSession(
@@ -54,6 +60,12 @@ describe("sessionStateSchema", () => {
 
   it("rejects negative intervalSec", () => {
     expect(sessionStateSchema.safeParse({ ...freshState(), intervalSec: -1 }).success).toBe(false);
+  });
+
+  it("accepts a fractional intervalSec produced by a non-integer growthFactor ladder", () => {
+    expect(Number.isInteger(fractionalRungSec)).toBe(false); // guards against config drift
+    const state = { ...freshState(), intervalSec: fractionalRungSec };
+    expect(sessionStateSchema.safeParse(state).success).toBe(true);
   });
 
   it("rejects an unknown phase", () => {
@@ -117,6 +129,28 @@ describe("trialRecordSchema", () => {
 
   it("rejects an unknown outcome", () => {
     expect(trialRecordSchema.safeParse({ ...valid, outcome: "maybe" }).success).toBe(false);
+  });
+
+  it("accepts a fractional intervalSec (alzheimers ladder rung, e.g. 22.5)", () => {
+    expect(trialRecordSchema.safeParse({ ...valid, intervalSec: fractionalRungSec }).success).toBe(
+      true,
+    );
+  });
+});
+
+describe("targetProgressSchema", () => {
+  const valid = {
+    lastSuccessSec: null,
+    startStreak: 0,
+    lastStartSuccessDay: null,
+    badSessions: 0,
+    mastered: false,
+    sessionCount: 0,
+  };
+
+  it("accepts a fractional lastSuccessSec (alzheimers ladder rung, e.g. 22.5)", () => {
+    const result = targetProgressSchema.safeParse({ ...valid, lastSuccessSec: fractionalRungSec });
+    expect(result.success).toBe(true);
   });
 });
 
