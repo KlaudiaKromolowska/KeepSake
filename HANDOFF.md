@@ -99,17 +99,27 @@ OSS libs + patterns-in-head are fine. `PLAN.md §7` reframed accordingly.
   commit, everything regenerated live** (no file copies from the practice repo; knowledge and
   plan docs carry, code does not).
 
-## First actions when work resumes (from `PLAN.md §15/§15b`)
-1. Fresh `create-next-app` (never degit FF); `.env.example` before first commit + push protection;
-   new Supabase project (**EU region**); Vercel; deploy hello-world.
-2. Write the SR-engine tests **first** (`candidacy`, `ladder`, `session`, `scheduler`) — encode the
-   protocol as failing tests **including the v4 edge decisions above**. Pure reducer + injected
-   clock.
-3. **SLP outreach Day 1** (call by Day 4, drop-dead Day 5 — named user + demo fallback = card +
-   quote). Acquire the **Benigas/Brush/Elliott "Spaced Retrieval Step by Step"** manual.
-4. Draft wellness-safe copy + the honesty ledger early (legally load-bearing).
-5. Register the demo domain; demo-video script v0 in repo, updated daily; confirm submission-portal
-   mechanics + ask the New-Work-Only scaffolding question in #questions.
+## State as of 2026-07-08 EOD (D2) — Phases 0–5 done, +4 V1 pulls; film is what's left
+- **Everything through Phase 5 is merged to main** (TASKS.md has per-item PR refs). Beyond plan,
+  four V1 items were pulled forward and merged same day: V1 speech-graded recall (flag
+  `NEXT_PUBLIC_SPEECH=1`, default OFF), practice-due status on the dashboard, the kiosk speech
+  layer (device speaks the correction; **needs a human ear-pass before filming**), and an
+  AI-quality batch (alias dedupe, vision gets target context, golden set 10/10).
+- **Persona photos exist and are verified**: `apps/web/public/images/lena{,-group}.jpg`
+  (AI-generated, clean crop cut from the group shot for face consistency); vision QA verified live
+  both ways (group → needs_work + crop advice, crop → good) and recorded as the fixture.
+- **Deploy debt (the one real gap):** prod = keepsake-nu.vercel.app still runs **Phase 2**. Remote
+  Supabase needs `supabase link` + `supabase db push` (three new migrations: `affect_two_tap`,
+  `ai_usage_grade_kind`, `api_role_grants`) before/with `vercel deploy --prod`, then re-verify the
+  wizard→session→debrief loop on the prod URL (D4-gate leftover). Note: the repo-local CLI was
+  never linked to the remote project; two candidate projects exist in the account.
+- **Local dev gotcha (solved, keep in mind):** a fresh `supabase db reset` hits Supabase's
+  public-schema privilege hardening (API roles get no DML) — fixed durably by the
+  `api_role_grants` migration; reset + `pnpm exec tsx --env-file=apps/web/.env.local
+  scripts/seed.ts` is the full local rebuild.
+- **Remaining plan items:** 5.7 (etiology UI — optional), 5.8 gate (scratch recording, D5),
+  4.8 (SLP call — human-side; Monika reply drafted Jul 8), then Phase 6 film (user schedules;
+  planned Jul 11–12) and Phase 7 submission (Jul 13, 9PM ET).
 
 ## The four deliverables, restated
 - 3-min demo video (emotional arc: relearning a grandchild's name across expanding intervals +
