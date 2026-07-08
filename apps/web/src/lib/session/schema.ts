@@ -6,7 +6,7 @@ export const outcomeSchema = z.enum(["recall", "miss", "unclear"]);
 /** One probe result — mirrors core `TrialRecord` (boundary-computed columns excluded). */
 export const trialRecordSchema = z
   .object({
-    intervalSec: z.number().int().min(0).max(86_400),
+    intervalSec: z.number().finite().min(0).max(86_400),
     outcome: outcomeSchema,
     isScreening: z.boolean(),
     corrected: z.boolean(),
@@ -17,7 +17,7 @@ export const trialRecordSchema = z
 /** Cross-session per-target progress — mirrors core `TargetProgress`. */
 export const targetProgressSchema = z
   .object({
-    lastSuccessSec: z.number().int().min(0).nullable(),
+    lastSuccessSec: z.number().finite().min(0).nullable(),
     startStreak: z.number().int().min(0),
     lastStartSuccessDay: z
       .string()
@@ -37,7 +37,7 @@ export const targetProgressSchema = z
 export const sessionStateSchema = z
   .object({
     phase: z.enum(["teach", "distractor", "awaiting_probe", "correcting", "end_on_win", "ended"]),
-    intervalSec: z.number().int().min(0),
+    intervalSec: z.number().finite().min(0),
     baseMisses: z.number().int().min(0),
     unclearRun: z.number().int().min(0),
     startedAt: z.number().int().positive(),
@@ -94,8 +94,8 @@ export const annotateSessionInputSchema = z
     sessionId: z.string().uuid(),
     kind: z.enum(["answer_card", "interval_override"]),
     note: z.string().max(300).optional(),
-    fromSec: z.number().int().min(0).optional(),
-    toSec: z.number().int().min(0).optional(),
+    fromSec: z.number().finite().min(0).optional(),
+    toSec: z.number().finite().min(0).optional(),
     at: z.number().int().positive(),
   })
   .strict();

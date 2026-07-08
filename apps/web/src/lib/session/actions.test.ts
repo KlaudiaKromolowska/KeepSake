@@ -1,4 +1,4 @@
-import { defaultsForEtiology, startSession } from "@keepsake/core/sr";
+import { defaultsForEtiology, nextIntervalSec, startSession } from "@keepsake/core/sr";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { requireUser } from "@/lib/actions";
 import {
@@ -438,6 +438,66 @@ describe("recordTrialAction", () => {
     });
     expect(result.data).toBeNull();
     expect(typeof result.error).toBe("string");
+  });
+
+  it("logs field paths + zod issue codes (never values) instead of silently dropping the save", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockUser(makeSupabase(() => ({ data: null, error: null })).client);
+
+    const secretAnswer = "super-secret-patient-answer";
+    await recordTrialAction({
+      sessionId: SESSION_ID,
+      targetId: TARGET_ID,
+      trial: { ...trial, at: -1 },
+      snapshot: snap({ startedDay: secretAnswer }),
+    });
+
+    expect(errSpy).toHaveBeenCalled();
+    const loggedText = errSpy.mock.calls.flat().map(String).join(" ");
+    expect(loggedText).not.toContain(secretAnswer);
+    const [, issues] = errSpy.mock.calls[0] as [string, { path: string; code: string }[]];
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues[0]).toHaveProperty("path");
+    expect(issues[0]).toHaveProperty("code");
+
+    errSpy.mockRestore();
+  });
+
+  // Regression: the alzheimers etiology default (growthFactor 1.5) produces fractional ladder
+  // rungs (15 → 22.5 → ...). `.int()` on intervalSec/lastSuccessSec used to reject these snapshots
+  // silently — the session stopped persisting and `ended_at` never landed. Derived from the real
+  // config so this breaks if the defaults ever stop exercising the fractional case.
+  it("persists a fractional intervalSec (alzheimers ladder rung) instead of silently dropping the save", async () => {
+    const fractionalRungSec = nextIntervalSec(config.baseIntervalSec, config);
+    expect(Number.isInteger(fractionalRungSec)).toBe(false);
+
+    const newSnap = snap({
+      phase: "distractor",
+      intervalSec: fractionalRungSec,
+      progress: { ...snap().progress, lastSuccessSec: fractionalRungSec },
+    });
+    const { client, calls } = makeSupabase((s) => {
+      if (s.table === "trials") return { data: null, error: null };
+      if (s.table === "sessions" && s.verb === "select")
+        return { data: { summary: { snapshot: { phase: "old" } } }, error: null };
+      if (s.table === "sessions" && s.verb === "update") return { data: null, error: null };
+      return { data: null, error: null };
+    });
+    mockUser(client);
+
+    const result = await recordTrialAction({
+      sessionId: SESSION_ID,
+      targetId: TARGET_ID,
+      trial: { ...trial, intervalSec: fractionalRungSec },
+      snapshot: newSnap,
+    });
+
+    expect(result).toEqual({ data: null, error: null });
+    const ins = calls.find((c) => c.table === "trials" && c.verb === "insert");
+    expect((ins?.payload as { interval_sec: number }).interval_sec).toBe(fractionalRungSec);
+    const upd = calls.find((c) => c.table === "sessions" && c.verb === "update");
+    const summary = (upd?.payload as { summary: Record<string, unknown> }).summary;
+    expect(summary.snapshot).toEqual(newSnap);
   });
 });
 

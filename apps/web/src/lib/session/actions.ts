@@ -12,6 +12,7 @@ import {
   startSession,
   type TargetProgress,
 } from "@keepsake/core/sr";
+import type { z } from "zod";
 import type { ActionResult } from "@/lib/actions";
 import { failAction, requireUser } from "@/lib/actions";
 import type { Json, Tables, TablesInsert } from "@/lib/supabase/database.types";
@@ -44,7 +45,19 @@ export interface StartSessionResult {
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
-const zerr = (issues: { message: string }[]) => issues.map((i) => i.message).join("; ");
+
+/**
+ * Input/snapshot failed zod validation — a silent drop here previously meant a session just
+ * stopped persisting with no server-side trace. Log field paths + issue codes only (never the
+ * rejected values — GDPR Art. 9 data minimization), then return the user-facing message join.
+ */
+function zerr(issues: z.ZodIssue[]): string {
+  console.error(
+    "session schema validation failed",
+    issues.map((i) => ({ path: i.path.join("."), code: i.code })),
+  );
+  return issues.map((i) => i.message).join("; ");
+}
 
 /** Non-array JSON object → a shallow-cloneable record; anything else → {}. Never throws. */
 function asRecord(json: Json | null | undefined): Record<string, unknown> {
