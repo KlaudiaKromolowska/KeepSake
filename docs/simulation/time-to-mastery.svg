@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" width="720" height="400" role="img" aria-labelledby="chart-title">
+    <title id="chart-title">Time to mastery (simulated days) — Distribution across mastered synthetic patients — percentiles, not individual patients</title>
+    <rect x="0" y="0" width="720" height="400" fill="#ffffff"/>
+    <text x="56" y="24" font-size="16" font-weight="600" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">Time to mastery (simulated days)</text>
+    <text x="56" y="40" font-size="13" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">Distribution across mastered synthetic patients — percentiles, not individual patients</text>
+    <line x1="56" y1="64" x2="696" y2="64" stroke="#e5e7eb" stroke-width="1"/>
+      <text x="48" y="68" text-anchor="end" font-size="11" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">60.5</text>
+<line x1="56" y1="130" x2="696" y2="130" stroke="#e5e7eb" stroke-width="1"/>
+      <text x="48" y="134" text-anchor="end" font-size="11" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">45.4</text>
+<line x1="56" y1="196" x2="696" y2="196" stroke="#e5e7eb" stroke-width="1"/>
+      <text x="48" y="200" text-anchor="end" font-size="11" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">30.3</text>
+<line x1="56" y1="262" x2="696" y2="262" stroke="#e5e7eb" stroke-width="1"/>
+      <text x="48" y="266" text-anchor="end" font-size="11" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">15.1</text>
+<line x1="56" y1="328" x2="696" y2="328" stroke="#e5e7eb" stroke-width="1"/>
+      <text x="48" y="332" text-anchor="end" font-size="11" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">0</text>
+    <line x1="56" y1="328" x2="696" y2="328" stroke="#9ca3af" stroke-width="1"/>
+    <g>
+        <rect x="56" y="299.6363636363636" width="120" height="28.363636363636363" fill="#2563eb" rx="2"/>
+        <text x="116" y="293.6363636363636" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">6.5d</text>
+        <text x="116" y="348" text-anchor="middle" font-size="11" fill="#374151" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">p10</text>
+      </g>
+<g>
+        <rect x="186" y="268" width="120" height="60" fill="#2563eb" rx="2"/>
+        <text x="246" y="262" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">13.8d</text>
+        <text x="246" y="348" text-anchor="middle" font-size="11" fill="#374151" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">p25</text>
+      </g>
+<g>
+        <rect x="316" y="226.54545454545456" width="120" height="101.45454545454545" fill="#2563eb" rx="2"/>
+        <text x="376" y="220.54545454545456" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">23.3d</text>
+        <text x="376" y="348" text-anchor="middle" font-size="11" fill="#374151" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">p50 (median)</text>
+      </g>
+<g>
+        <rect x="446" y="150.1818181818182" width="120" height="177.8181818181818" fill="#2563eb" rx="2"/>
+        <text x="506" y="144.1818181818182" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">40.8d</text>
+        <text x="506" y="348" text-anchor="middle" font-size="11" fill="#374151" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">p75</text>
+      </g>
+<g>
+        <rect x="576" y="64" width="120" height="264" fill="#2563eb" rx="2"/>
+        <text x="636" y="58" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">60.5d</text>
+        <text x="636" y="348" text-anchor="middle" font-size="11" fill="#374151" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">p90</text>
+      </g>
+  </svg>

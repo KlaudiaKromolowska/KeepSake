@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./sr": "./src/sr/index.ts",
+    "./sim": "./src/sim/index.ts",
     "./speech": "./src/speech/index.ts",
     "./prompts/*": "./prompts/*.ts"
   },
