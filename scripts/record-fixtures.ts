@@ -148,6 +148,40 @@ async function recordDistractors(admin: Admin, patientId: string): Promise<void>
   console.error("record-fixtures: distractors — recorded");
 }
 
+// --- grade (V1 speech assist — Haiku recall grader) --------------------------------------------
+
+async function recordGrade(admin: Admin, patientId: string): Promise<void> {
+  const { data: target } = await admin
+    .from("targets")
+    .select("question, answer, accepted_variants")
+    .eq("patient_id", patientId)
+    .in("status", ["active", "maintenance"])
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!target) throw new Error("no seeded active/maintenance target found for demo patient");
+
+  const { buildGradePrompt, GRADE_SYSTEM } = await import("@keepsake/core/prompts/grade");
+  const { gradeVerdictSchema, aliasesFromJson } = await import("@/lib/session/grade-schema");
+  // A genuinely ambiguous, hesitant utterance — the band that reaches Haiku in the live path.
+  const result = await generateStructured({
+    kind: "grade",
+    schema: gradeVerdictSchema,
+    system: GRADE_SYSTEM,
+    user: buildGradePrompt({
+      question: target.question,
+      answer: target.answer,
+      aliases: aliasesFromJson(target.accepted_variants),
+      transcript: "oh dear, I want to say it... it's on the tip of my tongue",
+      locale: "en",
+    }),
+    model: "claude-haiku-4-5",
+    maxTokens: 256,
+  });
+  writeStructuredFixture("grade", result);
+  console.error("record-fixtures: grade — recorded");
+}
+
 // --- vision (skip if no seeded photo asset) -------------------------------------------------
 
 async function recordVision(): Promise<"recorded" | "skipped"> {
@@ -383,6 +417,7 @@ async function main(): Promise<void> {
 
   await recordWizard();
   await recordDistractors(admin, patient.id);
+  await recordGrade(admin, patient.id);
   await recordVision();
   await recordDebrief(admin, patient.id);
   await recordRct(admin, patient);

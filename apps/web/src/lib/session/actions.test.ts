@@ -131,6 +131,7 @@ const activeTarget = {
   image_url: "https://img/ana.jpg",
   status: "active",
   patient_id: "p-1",
+  accepted_variants: ["Ana"],
 };
 
 beforeEach(() => {
@@ -161,6 +162,7 @@ describe("startSessionAction", () => {
       question: activeTarget.question,
       answer: activeTarget.answer,
       imageUrl: activeTarget.image_url,
+      acceptedVariants: ["Ana"],
     });
     expect(result.data?.config.growthFactor).toBe(1.5); // alzheimers tuning
     const insert = calls.find((c) => c.table === "sessions" && c.verb === "insert");

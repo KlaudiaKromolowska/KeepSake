@@ -15,6 +15,7 @@ import {
 import type { ActionResult } from "@/lib/actions";
 import { failAction, requireUser } from "@/lib/actions";
 import type { Json, Tables, TablesInsert } from "@/lib/supabase/database.types";
+import { aliasesFromJson } from "./grade-schema";
 import {
   annotateSessionInputSchema,
   endSessionInputSchema,
@@ -29,6 +30,8 @@ export interface SessionTarget {
   question: string;
   answer: string;
   imageUrl: string | null;
+  /** Accept-aliases from the wizard — the speech assist matches against these too. */
+  acceptedVariants: readonly string[];
 }
 export interface StartSessionResult {
   sessionId: string;
@@ -84,7 +87,7 @@ export async function startSessionAction(
 
   const { data: target, error: targetErr } = await supabase
     .from("targets")
-    .select("id, question, answer, image_url, status, patient_id")
+    .select("id, question, answer, image_url, status, patient_id, accepted_variants")
     .eq("id", targetId)
     .single();
   if (targetErr || !target) {
@@ -110,6 +113,7 @@ export async function startSessionAction(
     question: target.question,
     answer: target.answer,
     imageUrl: target.image_url,
+    acceptedVariants: aliasesFromJson(target.accepted_variants),
   };
 
   const { data: open, error: openErr } = await supabase
