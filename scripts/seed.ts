@@ -7,6 +7,7 @@
 import { execSync } from "node:child_process";
 import {
   afterCeilingHandoff,
+  afterMastery,
   type CandidacyState,
   candidacyReduce,
   defaultsForEtiology,
@@ -384,6 +385,92 @@ function driveArc(): Arc {
   };
 }
 
+// --- driving a second, already-mastered target (V2 multi-target demo) ------------------------
+//
+// A second memory ("Kraków") that has reached mastery and is now on its booster loop, so the demo
+// shows the multi-target queue: "Lena" acquiring, this one settled and running check-ins in
+// parallel. Four distinct-day sessions — one teach + three start-probe recalls — take the start
+// streak to masteryStreak (3), which the reducer itself ends as `mastered`. Every value still
+// traces to real @keepsake/core output; nothing is hand-written. Mastered on day −8 with a 7-day
+// first booster cadence → the next check-in falls a day ago, so it reads as "due" on camera.
+
+function driveMasteredArc(): {
+  sessions: Array<{ startedAt: number; endedAt: number; trials: TrialRecord[] }>;
+  finalProgress: TargetProgress;
+  schedule: ScheduleState;
+  masteredAt: number;
+} {
+  const initialProgress: TargetProgress = {
+    lastSuccessSec: null,
+    startStreak: 0,
+    lastStartSuccessDay: null,
+    badSessions: 0,
+    mastered: false,
+    sessionCount: 0,
+  };
+  const day = (n: number) => zonedTimeMs(dateNDaysAgo(n, PATIENT_TZ), 9, 0, PATIENT_TZ);
+
+  // M1 (day −14): first session — teach + two climbs (r0→r1), ends on a win. streak 0.
+  let cursor = day(14);
+  let m1 = startSession(initialProgress, { at: cursor, timeZone: PATIENT_TZ }, config);
+  let li = 0;
+  ({ at: cursor, state: m1 } = teach(cursor, m1, li++));
+  ({ at: cursor, state: m1 } = wait(cursor, m1));
+  ({ at: cursor, state: m1 } = probe(cursor, m1, "recall", li++)); // r0
+  ({ at: cursor, state: m1 } = wait(cursor, m1));
+  ({ at: cursor, state: m1 } = probe(cursor, m1, "recall", li++)); // r1
+  ({ at: cursor, state: m1 } = endSession(cursor, m1, li++));
+  assertState("mastered-m1", m1, {
+    endReason: "caregiver",
+    startStreak: 0,
+    handoff: false,
+    lastSuccessSec: 22.5, // r1
+  });
+  const m1End = cursor;
+
+  // M2 (day −12), M3 (day −10): a start-probe recall each — the streak climbs 1 → 2 across distinct
+  // calendar days, and the session closes on that same win (no ladder work needed).
+  const startProbeSession = (prev: SessionState, atDay: number, label: string, streak: number) => {
+    let s = startSession(prev.progress, { at: atDay, timeZone: PATIENT_TZ }, config);
+    let end = atDay;
+    ({ at: end, state: s } = probe(atDay, s, "recall", 0)); // start probe → streak++
+    ({ at: end, state: s } = endSession(end, s, 1));
+    assertState(label, s, {
+      endReason: "caregiver",
+      startStreak: streak,
+      handoff: false,
+      lastSuccessSec: 22.5,
+    });
+    return { state: s, end };
+  };
+  const m2 = startProbeSession(m1, day(12), "mastered-m2", 1);
+  const m3 = startProbeSession(m2.state, day(10), "mastered-m3", 2);
+
+  // M4 (day −8): start-probe recall takes the streak to 3 = mastery. The reducer ends the session
+  // itself (endReason "mastered", scheduler handoff) — no explicit caregiver close.
+  const m4Day = day(8);
+  let m4 = startSession(m3.state.progress, { at: m4Day, timeZone: PATIENT_TZ }, config);
+  ({ state: m4 } = probe(m4Day, m4, "recall", 0));
+  assertState("mastered-m4", m4, {
+    endReason: "mastered",
+    startStreak: 3,
+    handoff: true,
+    lastSuccessSec: 22.5,
+  });
+
+  return {
+    sessions: [
+      { startedAt: day(14), endedAt: m1End, trials: m1.trials },
+      { startedAt: day(12), endedAt: m2.end, trials: m2.state.trials },
+      { startedAt: day(10), endedAt: m3.end, trials: m3.state.trials },
+      { startedAt: m4Day, endedAt: m4Day, trials: m4.trials },
+    ],
+    finalProgress: m4.progress,
+    schedule: afterMastery(m4Day, config),
+    masteredAt: m4Day,
+  };
+}
+
 // --- persistence ---------------------------------------------------------------------------
 
 function trialRow(sessionId: string, targetId: string, tr: TrialRecord, idx: number) {
@@ -527,7 +614,76 @@ async function seed(): Promise<void> {
   });
   if (targetStateErr) throw new Error(`target_state insert failed: ${targetStateErr.message}`);
 
+  await seedMasteredTarget(admin, patientId);
+
   await printSummary(admin, caregiverId, patientId, targetId);
+}
+
+/**
+ * Insert the second, already-mastered target and its four-session booster-loop history so the demo
+ * exercises the V2 multi-target queue (one acquiring, one settled). Created AFTER "Lena", so Lena
+ * keeps the single acquisition slot; this one runs its check-ins in parallel.
+ */
+async function seedMasteredTarget(admin: SupabaseClient, patientId: string): Promise<void> {
+  const { data: target, error: targetErr } = await admin
+    .from("targets")
+    .insert({
+      patient_id: patientId,
+      question: "Where did you grow up?",
+      answer: "Kraków",
+      accepted_variants: ["Krakow", "Cracow"],
+      answer_format: answerFormat,
+      candidacy: "passed",
+      status: "mastered",
+      image_url: "/images/krakow.jpg", // placeholder, mirrors the Lena target
+    })
+    .select("id")
+    .single();
+  if (targetErr || !target) throw new Error(`mastered target insert failed: ${targetErr?.message}`);
+  const targetId = target.id as string;
+
+  const arc = driveMasteredArc();
+
+  let trialCount = 0;
+  for (const session of arc.sessions) {
+    const { data: sessionRow, error: sessionErr } = await admin
+      .from("sessions")
+      .insert({
+        patient_id: patientId,
+        started_at: new Date(session.startedAt).toISOString(),
+        ended_at: new Date(session.endedAt).toISOString(),
+        affect_pre: "content",
+        affect_post: "content",
+        summary: null,
+      })
+      .select("id")
+      .single();
+    if (sessionErr || !sessionRow)
+      throw new Error(`mastered session insert failed: ${sessionErr?.message}`);
+    const rows = session.trials.map((tr, idx) =>
+      trialRow(sessionRow.id, targetId, tr, trialCount + idx),
+    );
+    trialCount += rows.length;
+    const { error: trialsErr } = await admin.from("trials").insert(rows);
+    if (trialsErr) throw new Error(`mastered trials insert failed: ${trialsErr.message}`);
+  }
+
+  const { finalProgress: progress, schedule } = arc;
+  const { error: stateErr } = await admin.from("target_state").insert({
+    target_id: targetId,
+    last_success_interval_sec: progress.lastSuccessSec,
+    start_streak: progress.startStreak,
+    last_start_success_day: progress.lastStartSuccessDay,
+    bad_sessions: progress.badSessions,
+    mastered_at: new Date(arc.masteredAt).toISOString(),
+    session_count: progress.sessionCount,
+    // afterMastery (scheduler.ts): booster loop begins at step 0.
+    schedule_mode: schedule.mode,
+    between_session_gap_days: schedule.gapDays,
+    booster_step: schedule.boosterStep,
+    next_due_at: new Date(schedule.nextDueAt).toISOString(),
+  });
+  if (stateErr) throw new Error(`mastered target_state insert failed: ${stateErr.message}`);
 }
 
 async function printSummary(
