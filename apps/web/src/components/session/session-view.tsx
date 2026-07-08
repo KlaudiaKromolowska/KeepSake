@@ -227,6 +227,7 @@ function RunningSession({ result, demoSpeed }: { result: StartSessionResult; dem
       )}
       {state.phase === "ended" && (
         <EndScreen
+          sessionId={sessionId}
           recalls={recallCount(state.trials)}
           trials={state.trials.length}
           mastered={state.progress.mastered}

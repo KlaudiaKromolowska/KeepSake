@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { SESSION_COPY } from "@/lib/session/copy";
+import { DebriefPanel } from "./debrief-panel";
 
 export function EndScreen({
+  sessionId,
   recalls,
   trials,
   mastered,
@@ -11,6 +13,7 @@ export function EndScreen({
   onSaveNote,
   onHome,
 }: {
+  sessionId: string;
   recalls: number;
   trials: number;
   mastered: boolean;
@@ -47,6 +50,8 @@ export function EndScreen({
           {SESSION_COPY.ended.rescope}
         </p>
       )}
+
+      <DebriefPanel sessionId={sessionId} />
 
       <div className="flex w-full max-w-xl flex-col items-start gap-3">
         <label htmlFor="session-note" className="text-xl text-zinc-700">
