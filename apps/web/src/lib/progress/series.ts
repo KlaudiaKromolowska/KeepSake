@@ -142,11 +142,14 @@ export function describeAcquisition(
     } else if (last.bestRecallSec === first.bestRecallSec) {
       sentences.push(summary.held(n, firstDay, lastDay, to));
     } else {
-      sentences.push(summary.moved(n, firstDay, lastDay, from, to));
+      // Ending lower than it began: lead with the best delay, never "went from X down to Y" —
+      // the reassurance is folded into the moved sentence, so the rebuilding line is skipped.
+      sentences.push(summary.moved(n, firstDay, lastDay, formatDuration(best)));
     }
   }
 
-  if (last.bestRecallSec < best) sentences.push(summary.rebuilding(formatDuration(best)));
+  if (last.bestRecallSec < best && last.bestRecallSec >= first.bestRecallSec)
+    sentences.push(summary.rebuilding(formatDuration(best)));
 
   const reminders = points.filter((p) => p.startMiss).length;
   if (reminders > 0) sentences.push(summary.reminders(reminders));

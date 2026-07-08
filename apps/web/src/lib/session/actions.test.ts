@@ -5,6 +5,7 @@ import {
   annotateSessionAction,
   endSessionAction,
   recordTrialAction,
+  saveSessionAffectAction,
   saveSessionNoteAction,
   startSessionAction,
 } from "./actions";
@@ -131,6 +132,7 @@ const activeTarget = {
   image_url: "https://img/ana.jpg",
   status: "active",
   patient_id: "p-1",
+  accepted_variants: ["Ana"],
 };
 
 beforeEach(() => {
@@ -161,6 +163,7 @@ describe("startSessionAction", () => {
       question: activeTarget.question,
       answer: activeTarget.answer,
       imageUrl: activeTarget.image_url,
+      acceptedVariants: ["Ana"],
     });
     expect(result.data?.config.growthFactor).toBe(1.5); // alzheimers tuning
     const insert = calls.find((c) => c.table === "sessions" && c.verb === "insert");
@@ -697,6 +700,67 @@ describe("saveSessionNoteAction", () => {
     expect(
       (await saveSessionNoteAction({ sessionId: SESSION_ID, note: "a".repeat(2001) })).error,
     ).toEqual(expect.any(String));
+  });
+});
+
+describe("saveSessionAffectAction", () => {
+  it("writes affect_pre for point 'pre' and only that column", async () => {
+    const { client, calls } = makeSupabase(() => ({ data: null, error: null }));
+    mockUser(client);
+    const result = await saveSessionAffectAction({
+      sessionId: SESSION_ID,
+      point: "pre",
+      affect: "content",
+    });
+    expect(result).toEqual({ data: null, error: null });
+    const upd = calls.find((c) => c.table === "sessions" && c.verb === "update");
+    expect(upd?.payload).toEqual({ affect_pre: "content" });
+    expect(upd?.filters).toEqual({ id: SESSION_ID });
+  });
+
+  it("writes affect_post for point 'post'", async () => {
+    const { client, calls } = makeSupabase(() => ({ data: null, error: null }));
+    mockUser(client);
+    const result = await saveSessionAffectAction({
+      sessionId: SESSION_ID,
+      point: "post",
+      affect: "unsettled",
+    });
+    expect(result).toEqual({ data: null, error: null });
+    const upd = calls.find((c) => c.table === "sessions" && c.verb === "update");
+    expect(upd?.payload).toEqual({ affect_post: "unsettled" });
+  });
+
+  it("rejects values outside the two literals without touching the DB", async () => {
+    const { client, calls } = makeSupabase(() => ({ data: null, error: null }));
+    mockUser(client);
+    const result = await saveSessionAffectAction({
+      sessionId: SESSION_ID,
+      point: "pre",
+      affect: "ecstatic",
+    });
+    expect(result.error).toEqual(expect.any(String));
+    expect(calls).toHaveLength(0);
+  });
+
+  it("returns a generic message on a DB error (no raw error leaks)", async () => {
+    const dbError = { code: "42501", message: "permission denied for table sessions" };
+    const { client } = makeSupabase((s) =>
+      s.table === "sessions" && s.verb === "update"
+        ? { data: null, error: dbError }
+        : { data: null, error: null },
+    );
+    mockUser(client);
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await saveSessionAffectAction({
+      sessionId: SESSION_ID,
+      point: "post",
+      affect: "content",
+    });
+    spy.mockRestore();
+    expect(result.data).toBeNull();
+    expect(result.error).toBe("Couldn't save that just now.");
+    expect(result.error).not.toContain("permission denied");
   });
 });
 

@@ -64,6 +64,8 @@ export default async function SessionPage() {
   }
 
   const demoSpeed = Number(process.env.DEMO_SPEED ?? "1");
+  // V1 speech assist — default OFF so the demo/film flow is byte-identical without the flag.
+  const speechEnabled = process.env.NEXT_PUBLIC_SPEECH === "1";
 
   // Fetched once per page load (not per session/trial) so a slow or failing Claude call never
   // blocks or breaks the kiosk flow — any failure here is swallowed and SessionView falls back to
@@ -89,6 +91,7 @@ export default async function SessionPage() {
         resumeAvailable={resumeAvailable}
         distractorPrompts={distractorPrompts}
         demoAudio={process.env.DEMO_MODE === "1"}
+        speechEnabled={speechEnabled}
       />
     </main>
   );

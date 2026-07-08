@@ -15,10 +15,12 @@ import {
 import type { ActionResult } from "@/lib/actions";
 import { failAction, requireUser } from "@/lib/actions";
 import type { Json, Tables, TablesInsert } from "@/lib/supabase/database.types";
+import { aliasesFromJson } from "./grade-schema";
 import {
   annotateSessionInputSchema,
   endSessionInputSchema,
   recordTrialInputSchema,
+  saveSessionAffectInputSchema,
   saveSessionNoteInputSchema,
   sessionStateSchema,
   startSessionInputSchema,
@@ -29,6 +31,8 @@ export interface SessionTarget {
   question: string;
   answer: string;
   imageUrl: string | null;
+  /** Accept-aliases from the wizard — the speech assist matches against these too. */
+  acceptedVariants: readonly string[];
 }
 export interface StartSessionResult {
   sessionId: string;
@@ -84,7 +88,7 @@ export async function startSessionAction(
 
   const { data: target, error: targetErr } = await supabase
     .from("targets")
-    .select("id, question, answer, image_url, status, patient_id")
+    .select("id, question, answer, image_url, status, patient_id, accepted_variants")
     .eq("id", targetId)
     .single();
   if (targetErr || !target) {
@@ -110,6 +114,7 @@ export async function startSessionAction(
     question: target.question,
     answer: target.answer,
     imageUrl: target.image_url,
+    acceptedVariants: aliasesFromJson(target.accepted_variants),
   };
 
   const { data: open, error: openErr } = await supabase
@@ -414,6 +419,24 @@ export async function endSessionAction(input: unknown): Promise<ActionResult<nul
   if (closeErr) return failAction("endSession: close", closeErr, "Could not close the session.");
 
   return applyEndState(supabase, targetId, applied);
+}
+
+/**
+ * Two-tap patient affect (5.4). Best-effort by design: the columns are nullable (null = skipped)
+ * and the kiosk never blocks the session flow on this save.
+ */
+export async function saveSessionAffectAction(input: unknown): Promise<ActionResult<null>> {
+  const parsed = saveSessionAffectInputSchema.safeParse(input);
+  if (!parsed.success) return { data: null, error: zerr(parsed.error.issues) };
+  const { sessionId, point, affect } = parsed.data;
+
+  const { supabase } = await requireUser();
+  const { error } = await supabase
+    .from("sessions")
+    .update(point === "pre" ? { affect_pre: affect } : { affect_post: affect })
+    .eq("id", sessionId);
+  if (error) return failAction("saveSessionAffect: update", error, "Couldn't save that just now.");
+  return { data: null, error: null };
 }
 
 export async function saveSessionNoteAction(input: unknown): Promise<ActionResult<null>> {

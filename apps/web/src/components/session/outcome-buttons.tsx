@@ -4,13 +4,28 @@ import { SESSION_COPY } from "@/lib/session/copy";
 const BUTTON_BASE =
   "flex min-h-[64px] items-center justify-center gap-3 rounded-2xl border-2 px-8 text-2xl font-medium focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900";
 
-export function OutcomeButtons({ onOutcome }: { onOutcome: (outcome: Outcome) => void }) {
+// Speech-assist emphasis: a soft ring on the suggested outcome. Suggestion only — the caregiver
+// always taps; all three buttons stay equally available.
+const SUGGESTED_RING: Record<Outcome, string> = {
+  recall: "ring-4 ring-emerald-600 ring-offset-2",
+  miss: "ring-4 ring-zinc-500 ring-offset-2",
+  unclear: "ring-4 ring-amber-600 ring-offset-2",
+};
+
+export function OutcomeButtons({
+  onOutcome,
+  suggested = null,
+}: {
+  onOutcome: (outcome: Outcome) => void;
+  suggested?: Outcome | null;
+}) {
+  const ring = (o: Outcome) => (suggested === o ? ` ${SUGGESTED_RING[o]}` : "");
   return (
     <div className="flex flex-wrap justify-center gap-6">
       <button
         type="button"
         onClick={() => onOutcome("recall")}
-        className={`${BUTTON_BASE} border-emerald-700 bg-emerald-50 text-emerald-900`}
+        className={`${BUTTON_BASE} border-emerald-700 bg-emerald-50 text-emerald-900${ring("recall")}`}
       >
         <CheckIcon />
         {SESSION_COPY.outcomes.recall}
@@ -18,7 +33,7 @@ export function OutcomeButtons({ onOutcome }: { onOutcome: (outcome: Outcome) =>
       <button
         type="button"
         onClick={() => onOutcome("miss")}
-        className={`${BUTTON_BASE} border-zinc-500 bg-zinc-50 text-zinc-900`}
+        className={`${BUTTON_BASE} border-zinc-500 bg-zinc-50 text-zinc-900${ring("miss")}`}
       >
         <ArrowPathIcon />
         {SESSION_COPY.outcomes.miss}
@@ -26,7 +41,7 @@ export function OutcomeButtons({ onOutcome }: { onOutcome: (outcome: Outcome) =>
       <button
         type="button"
         onClick={() => onOutcome("unclear")}
-        className={`${BUTTON_BASE} border-amber-700 bg-amber-50 text-amber-900`}
+        className={`${BUTTON_BASE} border-amber-700 bg-amber-50 text-amber-900${ring("unclear")}`}
       >
         <QuestionIcon />
         {SESSION_COPY.outcomes.unclear}
