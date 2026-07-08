@@ -9,21 +9,23 @@ import {
   assertAiQuota,
   generateStructured,
   QuotaError,
+  runToolLoop,
   streamText,
   streamThinkingJson,
 } from "./core";
 import { STREAM_JSON_SENTINEL } from "./stream-sentinel";
 
 // SDK + fixture loader are mocked so tests never touch the network or need an API key.
-const { ctor, parseMock, streamMock } = vi.hoisted(() => {
+const { ctor, parseMock, streamMock, createMock } = vi.hoisted(() => {
   const parseMock = vi.fn();
   const streamMock = vi.fn();
+  const createMock = vi.fn();
   // Regular function (not arrow): the AI core calls `new Anthropic(...)`, and arrows aren't newable.
   // biome-ignore lint/complexity/useArrowFunction: mock must be usable as a constructor.
   const ctor = vi.fn(function () {
-    return { messages: { parse: parseMock, stream: streamMock } };
+    return { messages: { parse: parseMock, stream: streamMock, create: createMock } };
   });
-  return { ctor, parseMock, streamMock };
+  return { ctor, parseMock, streamMock, createMock };
 });
 vi.mock("@anthropic-ai/sdk", () => ({ default: ctor }));
 vi.mock("@anthropic-ai/sdk/helpers/zod", () => ({
@@ -191,6 +193,98 @@ describe("generateStructured — live path", () => {
     let caught: unknown;
     try {
       await generateStructured({ kind: "wizard", schema, system: "s", user: "u" });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(AiUnavailableError);
+    expect((caught as Error).message).not.toMatch(/secret internal/);
+  });
+});
+
+describe("runToolLoop — loop control", () => {
+  const toolUse = (id: string, name: string, input: unknown) => ({
+    content: [{ type: "tool_use", id, name, input }],
+    stop_reason: "tool_use",
+    usage: {},
+  });
+  const textMsg = (text: string) => ({
+    content: [{ type: "text", text }],
+    stop_reason: "end_turn",
+    usage: {},
+  });
+  const base = { kind: "rct" as const, system: "s", user: "u", tools: [] };
+
+  it("returns the text with an empty trail when the model answers without tools", async () => {
+    createMock.mockResolvedValue(textMsg("## Summary\nhi"));
+    const runTool = vi.fn();
+    const { text, trail } = await runToolLoop({ ...base, runTool });
+    expect(text).toBe("## Summary\nhi");
+    expect(trail).toEqual([]);
+    expect(runTool).not.toHaveBeenCalled();
+    expect(createMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("wires a tool result back into the next request and records the trail", async () => {
+    createMock
+      .mockResolvedValueOnce(toolUse("t1", "get_trial_counts", { target: 1 }))
+      .mockResolvedValueOnce(textMsg("done"));
+    const runTool = vi.fn(() => [{ session: 1 }]);
+
+    const { text, trail } = await runToolLoop({ ...base, runTool });
+
+    expect(text).toBe("done");
+    expect(trail).toEqual([{ name: "get_trial_counts", input: { target: 1 } }]);
+    expect(runTool).toHaveBeenCalledWith("get_trial_counts", { target: 1 });
+    // The second request carries the assistant tool_use turn + a user tool_result with the JSON.
+    const secondMessages = createMock.mock.calls[1][0].messages;
+    const toolResultTurn = secondMessages.at(-1);
+    expect(toolResultTurn.role).toBe("user");
+    expect(toolResultTurn.content[0]).toMatchObject({
+      type: "tool_result",
+      tool_use_id: "t1",
+      content: JSON.stringify([{ session: 1 }]),
+    });
+  });
+
+  it("respects the tool-call cap and forces a text answer with tool_choice none", async () => {
+    createMock
+      .mockResolvedValueOnce(toolUse("t1", "get_trial_counts", {}))
+      .mockResolvedValueOnce(toolUse("t2", "get_affect_summary", {}))
+      .mockResolvedValueOnce(textMsg("final"));
+    const runTool = vi.fn(() => ({}));
+
+    const { text, trail } = await runToolLoop({ ...base, runTool, maxToolCalls: 2 });
+
+    expect(text).toBe("final");
+    expect(trail).toHaveLength(2);
+    expect(runTool).toHaveBeenCalledTimes(2);
+    expect(createMock).toHaveBeenCalledTimes(3);
+    // The final (budget-exhausted) turn must forbid further tool use.
+    expect(createMock.mock.calls[2][0].tool_choice).toEqual({ type: "none" });
+    expect(createMock.mock.calls[0][0].tool_choice).toEqual({ type: "auto" });
+  });
+
+  it("reports a throwing tool back as an error result and keeps it out of the trail", async () => {
+    createMock
+      .mockResolvedValueOnce(toolUse("t1", "get_trial_counts", {}))
+      .mockResolvedValueOnce(textMsg("ok"));
+    const runTool = vi.fn(() => {
+      throw new Error("boom");
+    });
+
+    const { text, trail } = await runToolLoop({ ...base, runTool });
+
+    expect(text).toBe("ok");
+    expect(trail).toEqual([]);
+    const toolResult = createMock.mock.calls[1][0].messages.at(-1).content[0];
+    expect(toolResult.is_error).toBe(true);
+  });
+
+  it("wraps SDK errors in AiUnavailableError without leaking the message", async () => {
+    createMock.mockRejectedValue(new Error("secret internal detail"));
+    let caught: unknown;
+    try {
+      await runToolLoop({ ...base, runTool: vi.fn() });
     } catch (e) {
       caught = e;
     }

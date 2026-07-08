@@ -144,6 +144,98 @@ export async function generateStructured<T>(opts: {
   throw new AiUnavailableError(GENERIC_UNAVAILABLE);
 }
 
+/** One tool the model asked to run, in order — the ordered basis for the "analyses run" trail. */
+export interface ToolCall {
+  name: string;
+  input: unknown;
+}
+
+/**
+ * Agentic tool-use loop over an injected, side-effect-owning executor. The model calls tools from
+ * `tools`, we run each via `runTool` and feed the JSON result back, until it answers with text
+ * (or the tool-call budget is spent — the final turn forbids tools so it must answer). Returns the
+ * final text plus the ordered list of tool calls that actually ran (the trail). Sonnet 5 only;
+ * fixture replay is the caller's concern (per-feature result shape). Failures — SDK errors or an
+ * exhausted loop with no text — surface as AiUnavailableError; a single tool that throws is
+ * reported back to the model as an error result so it can recover, not fatal to the loop.
+ */
+export async function runToolLoop(opts: {
+  kind: AiKind;
+  system: string;
+  user: string;
+  tools: Anthropic.Tool[];
+  runTool: (name: string, input: unknown) => unknown;
+  maxToolCalls?: number;
+  maxTokens?: number;
+  effort?: Effort;
+}): Promise<{ text: string; trail: ToolCall[] }> {
+  const maxToolCalls = opts.maxToolCalls ?? 8;
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content: opts.user }];
+  const trail: ToolCall[] = [];
+  let toolCallsUsed = 0;
+
+  for (let turn = 0; turn <= maxToolCalls + 2; turn++) {
+    const outOfBudget = toolCallsUsed >= maxToolCalls;
+    let response: Anthropic.Message;
+    try {
+      response = await client().messages.create({
+        model: MODEL_SONNET,
+        max_tokens: opts.maxTokens ?? 4096,
+        system: systemBlocks(opts.system),
+        messages,
+        tools: opts.tools,
+        tool_choice: outOfBudget ? { type: "none" } : { type: "auto" },
+        output_config: { effort: opts.effort ?? "medium" },
+      });
+    } catch (err) {
+      console.error(`ai:${opts.kind} tool loop failed`, err);
+      throw new AiUnavailableError(GENERIC_UNAVAILABLE);
+    }
+    logCacheUsage(response.usage);
+
+    if (response.stop_reason !== "tool_use") {
+      const text = response.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("")
+        .trim();
+      return { text, trail };
+    }
+
+    // Preserve the full assistant turn (incl. any thinking blocks) before answering tool calls.
+    messages.push({ role: "assistant", content: response.content });
+    const results: Anthropic.ToolResultBlockParam[] = [];
+    for (const block of response.content) {
+      if (block.type !== "tool_use") continue;
+      let content: string;
+      let isError = false;
+      if (toolCallsUsed >= maxToolCalls) {
+        content = "Analysis budget reached. Write the report from the analyses already run.";
+        isError = true;
+      } else {
+        toolCallsUsed++;
+        try {
+          content = JSON.stringify(opts.runTool(block.name, block.input));
+          trail.push({ name: block.name, input: block.input });
+        } catch (err) {
+          console.error(`ai:${opts.kind} tool ${block.name} failed`, err);
+          content = "This analysis could not be completed.";
+          isError = true;
+        }
+      }
+      results.push({
+        type: "tool_result",
+        tool_use_id: block.id,
+        content,
+        ...(isError ? { is_error: true } : {}),
+      });
+    }
+    messages.push({ role: "user", content: results });
+  }
+  console.error(`ai:${opts.kind} tool loop exhausted turns without a final answer`);
+  throw new AiUnavailableError(GENERIC_UNAVAILABLE);
+}
+
 const encoder = new TextEncoder();
 
 function chunkedTextStream(text: string): ReadableStream<Uint8Array> {
