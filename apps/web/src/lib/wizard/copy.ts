@@ -49,15 +49,28 @@ export const WIZARD_COPY = {
     heading: "Check the photo",
     intro: "Ask Claude whether a photo works well as a picture cue for this memory.",
     checking: "Checking…",
-    noPhotos: "Add photos to check — none are available yet.",
+    noPhotos: "No example photos are set up yet — upload your own below.",
     verdictGood: "This photo works well",
     verdictNeedsWork: "This photo could work better",
     reasonsHeading: "What Claude noticed",
     cropAdviceLabel: "Suggested crop",
+    upload: {
+      heading: "Upload your own photo",
+      intro: "Choose a photo from this device and Claude will check how well it works as a cue.",
+      button: "Choose a photo",
+      uploading: "Uploading and checking…",
+      // Wellness-safe consent microcopy (PLAN §10): honest, no condition named, data-minimal.
+      consent:
+        "Your photo stays private to your account and is stored securely in the EU. It's used only to help with this memory practice, and you can remove it at any time. Please upload only a photo you have permission to use.",
+      exampleHeading: "Or try an example photo",
+    },
     errors: {
       missing: "That photo couldn't be found just now.",
       quota: "Claude's help has paused for a little while. Please try again later.",
       unavailable: "Claude couldn't check that photo just now. Please try again.",
+      tooLarge: "That photo is a bit too large — please choose one under 5 MB.",
+      badType: "Please choose a JPG, PNG, or WebP photo.",
+      uploadFailed: "That photo couldn't be uploaded just now. Please try again.",
     },
   },
   handEntry: {

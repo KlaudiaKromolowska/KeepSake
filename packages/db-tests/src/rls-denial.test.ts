@@ -648,6 +648,72 @@ describe("re-parenting attacks", () => {
   });
 });
 
+// Storage-object RLS — the same cross-tenant discipline as every table, extended to the private
+// `target-photos` bucket (caregiver photo upload). Ownership is the leading path segment: an object
+// is `<caregiver_id>/<uuid>.<ext>`, and the storage.objects policies scope every verb to
+// `(storage.foldername(name))[1] = auth.uid()`. Proves an owner can round-trip their own object and
+// that neither another caregiver nor anon can insert into, list, or download it.
+describe("RLS: storage.objects (target-photos bucket)", () => {
+  const BUCKET = "target-photos";
+  // Content-Type (not bytes) drives the bucket's allowed_mime_types check, so any body + a png type
+  // is enough to exercise the RLS policies (which are what this suite is about).
+  const body = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+  const upload = (client: SupabaseClient, name: string) =>
+    client.storage.from(BUCKET).upload(name, body, { contentType: "image/png" });
+  const objectName = (g: Graph, tag: string) => `${g.userId}/${tag}-${randomUUID()}.png`;
+
+  it("positive control: owner can upload, list, download, and delete under their own folder", async () => {
+    const name = objectName(graphA, "own");
+    const up = await upload(clientA, name);
+    expect(up.error).toBeNull();
+    expect(up.data?.path).toBe(name);
+
+    const list = await clientA.storage.from(BUCKET).list(graphA.userId);
+    expect(list.error).toBeNull();
+    const listed = (list.data ?? []).map((o) => `${graphA.userId}/${o.name}`);
+    expect(listed).toContain(name);
+
+    const dl = await clientA.storage.from(BUCKET).download(name);
+    expect(dl.error).toBeNull();
+
+    const del = await clientA.storage.from(BUCKET).remove([name]);
+    expect(del.error).toBeNull();
+  });
+
+  it("cross-tenant INSERT: B cannot upload into A's folder, and nothing persists", async () => {
+    const name = `${graphA.userId}/attack-${randomUUID()}.png`;
+    const up = await upload(clientB, name);
+    expect(up.error).not.toBeNull();
+
+    // Prove non-persistence directly via service role, not just that an error came back.
+    const filename = name.slice(name.indexOf("/") + 1);
+    const check = await admin.storage.from(BUCKET).list(graphA.userId, { search: filename });
+    expect(check.data ?? []).toHaveLength(0);
+  });
+
+  it("cross-tenant SELECT: B cannot list or download A's objects", async () => {
+    const name = objectName(graphA, "victim");
+    expect((await upload(clientA, name)).error).toBeNull();
+
+    const list = await clientB.storage.from(BUCKET).list(graphA.userId);
+    expect(list.error).toBeNull();
+    expect(list.data ?? []).toHaveLength(0);
+
+    const dl = await clientB.storage.from(BUCKET).download(name);
+    expect(dl.error).not.toBeNull();
+
+    await admin.storage.from(BUCKET).remove([name]);
+  });
+
+  it("anon: unauthenticated client cannot upload", async () => {
+    const name = `${graphA.userId}/anon-${randomUUID()}.png`;
+    const up = await anonClient.storage.from(BUCKET).upload(name, body, {
+      contentType: "image/png",
+    });
+    expect(up.error).not.toBeNull();
+  });
+});
+
 describe("ai_calls_today() global counter", () => {
   it("returns the same global count for any caller, spanning all tenants", async () => {
     // Each graph seeded one ai_usage row (in the last day); the SECURITY DEFINER function counts
