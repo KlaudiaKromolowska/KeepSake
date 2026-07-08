@@ -10,7 +10,9 @@ import {
   generateStructured,
   QuotaError,
   streamText,
+  streamThinkingJson,
 } from "./core";
+import { STREAM_JSON_SENTINEL } from "./stream-sentinel";
 
 // SDK + fixture loader are mocked so tests never touch the network or need an API key.
 const { ctor, parseMock, streamMock } = vi.hoisted(() => {
@@ -207,5 +209,148 @@ describe("streamText — fixture mode", () => {
     expect(text).toBe("A warm private note for the caregiver.");
     expect(ctor).not.toHaveBeenCalled();
     expect(streamMock).not.toHaveBeenCalled();
+  });
+});
+
+// A fake Anthropic stream: async-iterable over `events`, plus a finalMessage() like the real SDK.
+function fakeStream(events: unknown[]) {
+  return {
+    async *[Symbol.asyncIterator]() {
+      for (const e of events) yield e;
+    },
+    finalMessage: async () => ({ usage: {} }),
+  };
+}
+const thinkingDelta = (t: string) => ({
+  type: "content_block_delta",
+  delta: { type: "thinking_delta", thinking: t },
+});
+const textDelta = (t: string) => ({
+  type: "content_block_delta",
+  delta: { type: "text_delta", text: t },
+});
+
+const recSchema = z.object({ answerFormat: z.enum(["free_recall", "recognition"]) }).strict();
+// The reconcile stand-in mirrors the real guard: it emits the deterministic value, not the model's.
+const reconcile = (rec: { answerFormat: string } | null) => ({
+  applied: "free_recall",
+  model: rec?.answerFormat ?? null,
+});
+
+function splitStream(out: string) {
+  const idx = out.lastIndexOf(STREAM_JSON_SENTINEL);
+  return { reasoning: out.slice(0, idx), json: out.slice(idx + STREAM_JSON_SENTINEL.length) };
+}
+
+describe("streamThinkingJson — fixture mode", () => {
+  it("streams recorded reasoning then a reconciled JSON trailer, no SDK", async () => {
+    process.env.CLAUDE_FIXTURES = "1";
+    loadFixtureMock.mockReturnValue({
+      thinking: "Recognition suits this condition.",
+      recommendation: { answerFormat: "recognition" },
+    });
+
+    const out = await readStream(
+      streamThinkingJson({
+        kind: "etiology",
+        system: "s",
+        user: "u",
+        schema: recSchema,
+        reconcile,
+      }),
+    );
+
+    const { reasoning, json } = splitStream(out);
+    expect(reasoning).toBe("Recognition suits this condition.");
+    expect(JSON.parse(json)).toEqual({ applied: "free_recall", model: "recognition" });
+    expect(ctor).not.toHaveBeenCalled();
+  });
+
+  it("reconciles null when the recorded recommendation fails the schema", async () => {
+    process.env.CLAUDE_FIXTURES = "1";
+    loadFixtureMock.mockReturnValue({ thinking: "…", recommendation: { answerFormat: "bogus" } });
+
+    const out = await readStream(
+      streamThinkingJson({
+        kind: "etiology",
+        system: "s",
+        user: "u",
+        schema: recSchema,
+        reconcile,
+      }),
+    );
+    expect(JSON.parse(splitStream(out).json)).toEqual({ applied: "free_recall", model: null });
+  });
+});
+
+describe("streamThinkingJson — live path", () => {
+  it("forwards thinking as reasoning, validates the text JSON, and requests adaptive thinking", async () => {
+    streamMock.mockReturnValue(
+      fakeStream([
+        thinkingDelta("Because "),
+        thinkingDelta("recognition helps."),
+        textDelta('{"answerFormat": '),
+        textDelta('"recognition"}'),
+      ]),
+    );
+
+    const out = await readStream(
+      streamThinkingJson({
+        kind: "etiology",
+        system: "sys",
+        user: "u",
+        schema: recSchema,
+        reconcile,
+      }),
+    );
+
+    const { reasoning, json } = splitStream(out);
+    expect(reasoning).toBe("Because recognition helps.");
+    expect(JSON.parse(json)).toEqual({ applied: "free_recall", model: "recognition" });
+
+    const req = streamMock.mock.calls[0][0];
+    expect(req.model).toBe("claude-sonnet-5");
+    expect(req.thinking).toEqual({ type: "adaptive", display: "summarized" });
+    expect("format" in req.output_config).toBe(false); // no forced structured output on the thinking call
+    expect(parseMock).not.toHaveBeenCalled(); // no fallback when the text JSON parses
+  });
+
+  it("falls back to a non-thinking structured call when the text JSON is unparseable", async () => {
+    streamMock.mockReturnValue(
+      fakeStream([thinkingDelta("reasoning"), textDelta("sorry, no json here")]),
+    );
+    parseMock.mockResolvedValue({ parsed_output: { answerFormat: "recognition" }, usage: {} });
+
+    const out = await readStream(
+      streamThinkingJson({
+        kind: "etiology",
+        system: "s",
+        user: "u",
+        schema: recSchema,
+        reconcile,
+      }),
+    );
+
+    expect(parseMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(splitStream(out).json)).toEqual({
+      applied: "free_recall",
+      model: "recognition",
+    });
+  });
+
+  it("reconciles null when both the stream JSON and the fallback fail", async () => {
+    streamMock.mockReturnValue(fakeStream([thinkingDelta("reasoning"), textDelta("no json")]));
+    parseMock.mockRejectedValue(new Error("boom"));
+
+    const out = await readStream(
+      streamThinkingJson({
+        kind: "etiology",
+        system: "s",
+        user: "u",
+        schema: recSchema,
+        reconcile,
+      }),
+    );
+    expect(JSON.parse(splitStream(out).json)).toEqual({ applied: "free_recall", model: null });
   });
 });
