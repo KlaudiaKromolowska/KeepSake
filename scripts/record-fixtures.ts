@@ -25,7 +25,7 @@ import { runRctReport } from "@/lib/ai/rct-report";
 import { STREAM_JSON_SENTINEL } from "@/lib/ai/stream-sentinel";
 import { fetchDebriefAggregate } from "@/lib/debrief/aggregate";
 import { etiologyRecSchema } from "@/lib/etiology/schema";
-import type { Database, Json } from "@/lib/supabase/database.types";
+import type { Database } from "@/lib/supabase/database.types";
 import { mediaTypeFor, photoQaSchema } from "@/lib/wizard/vision-schema";
 import { loadWebEnv, requireEnv } from "./env";
 
