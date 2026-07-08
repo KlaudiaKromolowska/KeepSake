@@ -157,11 +157,19 @@ export async function startSessionAction(
       return failAction("startSession: discard stale", error, "Could not start the session.");
   }
 
-  const { data: stateRow } = await supabase
+  const { data: stateRow, error: stateReadErr } = await supabase
     .from("target_state")
     .select("*")
     .eq("target_id", targetId)
     .maybeSingle();
+  // Fail closed: a transient read error must not zero-init progress and restart from base rung.
+  if (stateReadErr) {
+    return failAction(
+      "startSession: target_state read",
+      stateReadErr,
+      "Could not start the session.",
+    );
+  }
   const state = startSession(
     rowToProgress(stateRow),
     { at: now, timeZone: patient.timezone },

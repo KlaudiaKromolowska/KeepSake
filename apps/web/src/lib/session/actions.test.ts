@@ -337,6 +337,24 @@ describe("startSessionAction", () => {
     expect(calls.some((c) => c.table === "sessions" && c.verb === "insert")).toBe(false);
   });
 
+  it("target_state read error → error result, no insert (fail closed, no zero-init)", async () => {
+    const { client, calls } = makeSupabase((s) => {
+      if (s.table === "targets") return { data: activeTarget, error: null };
+      if (s.table === "patients")
+        return { data: { timezone: TZ, etiology: "alzheimers" }, error: null };
+      if (s.table === "sessions" && s.verb === "select") return { data: null, error: null };
+      if (s.table === "target_state") return { data: null, error: { message: "boom" } };
+      return { data: null, error: null };
+    });
+    mockUser(client);
+
+    const result = await startSessionAction({ targetId: TARGET_ID });
+
+    expect(result.data).toBeNull();
+    expect(typeof result.error).toBe("string");
+    expect(calls.some((c) => c.table === "sessions" && c.verb === "insert")).toBe(false);
+  });
+
   it("target not active/maintenance → error result, no insert", async () => {
     const { client, calls } = makeSupabase((s) => {
       if (s.table === "targets") return { data: { ...activeTarget, status: "draft" }, error: null };
