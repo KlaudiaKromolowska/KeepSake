@@ -2,34 +2,27 @@
 // Claude API call per AI kind against real seeded data (`pnpm seed` — Marta/Lena) and writes the
 // verbatim response to packages/core/prompts/fixtures/<kind>.json in exactly the shape the AI
 // core's fixture loader expects (packages/core/prompts/fixtures.ts + apps/web/src/lib/ai/core.ts):
-// structured kinds (wizard, distractors, vision) write the parsed object; streamed kinds (debrief,
-// rct) write a JSON-encoded string of the raw text. LIVE API calls only — never run in CI.
-// Optional args restrict which kinds are recorded (`pnpm fixtures:record vision`) so a single
-// prompt change never forces re-spending on every kind.
+// structured kinds (wizard, distractors, vision) write the parsed object; the streamed debrief kind
+// writes a JSON-encoded string of the raw text; rct (agentic V2) writes the parsed {report, trail}
+// object. LIVE API calls only — never run in CI. Optional args restrict which kinds are recorded
+// (`pnpm fixtures:record vision`) so a single prompt change never forces re-spending on every kind.
 //
 // vision is recorded only if a seeded photo asset exists (apps/web/public/images/lena.jpg) —
-// skipped with a note otherwise. The rct dataset is built straight from the seeded DB using the
-// SAME query shape and serializer as apps/web/src/app/api/rct-report/route.ts, so the recorded
-// fixture matches what the live route actually sends.
+// skipped with a note otherwise. rct runs the SAME agentic loop as the /api/rct-report route
+// (buildRctInputs + runRctReport over the seeded DB), so the recorded fixture — report AND the
+// analyses-run trail — matches what the live route actually produces.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildDistractorsPrompt, DISTRACTORS_SYSTEM } from "@keepsake/core/prompts/distractors";
-import {
-  buildRctReportPrompt,
-  type RctAnnotation,
-  type RctSession,
-  type RctTargetState,
-  type RctTrial,
-  serializeTrialLog,
-} from "@keepsake/core/prompts/rct-report";
 import { buildVisionUserText, VISION_SYSTEM_PROMPT } from "@keepsake/core/prompts/vision";
-import { defaultsForEtiology, type Etiology } from "@keepsake/core/sr";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { generateStructured, streamText } from "@/lib/ai/core";
+import { buildRctInputs } from "@/lib/ai/rct-data";
+import { runRctReport } from "@/lib/ai/rct-report";
 import { fetchDebriefAggregate } from "@/lib/debrief/aggregate";
-import type { Database, Json } from "@/lib/supabase/database.types";
+import type { Database } from "@/lib/supabase/database.types";
 import { mediaTypeFor, photoQaSchema } from "@/lib/wizard/vision-schema";
 import { loadWebEnv, requireEnv } from "./env";
 
@@ -55,15 +48,6 @@ async function readStream(stream: ReadableStream<Uint8Array>): Promise<string> {
     out += decoder.decode(value);
   }
   return out;
-}
-
-/** ISO instant → YYYY-MM-DD in the given timezone (mirrors the rct-report route's dayInTz). */
-function dayInTz(iso: string, timeZone: string): string {
-  try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date(iso));
-  } catch {
-    return iso.slice(0, 10);
-  }
 }
 
 // --- Supabase (service-role, local stack only — dev script, not a user path) ------------------
@@ -253,162 +237,49 @@ async function recordDebrief(admin: Admin, patientId: string): Promise<void> {
   console.error("record-fixtures: debrief — recorded");
 }
 
-// --- rct (dataset built from the seeded DB, mirroring the /api/rct-report route exactly) -------
+// --- rct (agentic V2: same buildRctInputs + runRctReport path as the /api/rct-report route) ------
 
-function asRecord(json: Json | null | undefined): Record<string, unknown> {
-  return json && typeof json === "object" && !Array.isArray(json)
-    ? (json as Record<string, unknown>)
-    : {};
-}
-
-/** Pull endReason from a session summary (stats or snapshot), tolerating null/legacy shapes. */
-function endReasonOf(summary: Record<string, unknown>): string | null {
-  const stats = asRecord(summary.stats as Json);
-  const snap = asRecord(summary.snapshot as Json);
-  const reason = stats.endReason ?? snap.endReason;
-  return typeof reason === "string" ? reason : null;
-}
-
-function annotationsOf(summary: Record<string, unknown>): RctAnnotation[] {
-  const raw = summary.annotations;
-  if (!Array.isArray(raw)) return [];
-  return raw.map((a) => {
-    const o = asRecord(a as Json);
-    const note = typeof o.note === "string" ? o.note : undefined;
-    const fromSec = typeof o.fromSec === "number" ? o.fromSec : undefined;
-    const toSec = typeof o.toSec === "number" ? o.toSec : undefined;
-    return {
-      kind: typeof o.kind === "string" ? o.kind : "note",
-      ...(note !== undefined ? { note } : {}),
-      ...(fromSec !== undefined ? { fromSec } : {}),
-      ...(toSec !== undefined ? { toSec } : {}),
-    };
-  });
-}
-
-const asOutcome = (o: string): RctTrial["outcome"] =>
-  o === "miss" || o === "unclear" ? o : "recall";
-
-async function buildRctDataset(
+async function recordRct(
   admin: Admin,
   patient: { id: string; display_name: string; etiology: string; timezone: string },
-): Promise<string> {
+): Promise<void> {
   const [targetsRes, statesRes, sessionsRes] = await Promise.all([
     admin
       .from("targets")
       .select("id, question, answer, status, candidacy")
-      .eq("patient_id", patient.id),
-    admin.from("target_state").select("*"),
+      .eq("patient_id", patient.id)
+      .order("created_at", { ascending: true }),
+    admin
+      .from("target_state")
+      .select(
+        "target_id, last_success_interval_sec, start_streak, bad_sessions, session_count, mastered_at, schedule_mode, between_session_gap_days, booster_step, next_due_at",
+      ),
     admin
       .from("sessions")
-      .select("id, started_at, summary")
+      .select("id, started_at, affect_pre, affect_post")
       .eq("patient_id", patient.id)
       .order("started_at", { ascending: true }),
   ]);
-  const targets = targetsRes.data ?? [];
-  const states = statesRes.data ?? [];
   const sessions = sessionsRes.data ?? [];
   const sessionIds = sessions.map((s) => s.id);
-
   const trialsRes = sessionIds.length
     ? await admin
         .from("trials")
         .select("session_id, target_id, interval_sec, outcome, corrected, is_screening, at")
         .in("session_id", sessionIds)
         .order("at", { ascending: true })
-    : {
-        data: [] as Pick<
-          Database["public"]["Tables"]["trials"]["Row"],
-          | "session_id"
-          | "target_id"
-          | "interval_sec"
-          | "outcome"
-          | "corrected"
-          | "is_screening"
-          | "at"
-        >[],
-      };
-  const trials = trialsRes.data ?? [];
+    : { data: [], error: null };
 
-  const stateByTarget = new Map(states.map((s) => [s.target_id, s]));
-  const answerByTarget = new Map(targets.map((t) => [t.id, t.answer]));
-
-  const targetStates: RctTargetState[] = targets.map((t) => {
-    const st = stateByTarget.get(t.id);
-    return {
-      question: t.question,
-      answer: t.answer,
-      status: t.status,
-      candidacy: t.candidacy,
-      lastSuccessIntervalSec: st?.last_success_interval_sec ?? null,
-      startStreak: st?.start_streak ?? 0,
-      badSessions: st?.bad_sessions ?? 0,
-      sessionCount: st?.session_count ?? 0,
-      mastered: st?.mastered_at != null,
-      scheduleMode: st?.schedule_mode ?? null,
-      betweenSessionGapDays: st?.between_session_gap_days ?? null,
-      boosterStep: st?.booster_step ?? null,
-      nextDueAt: st?.next_due_at ? dayInTz(st.next_due_at, patient.timezone) : null,
-    };
+  const { context, data } = buildRctInputs({
+    patient,
+    targets: targetsRes.data ?? [],
+    states: statesRes.data ?? [],
+    sessions,
+    trials: trialsRes.data ?? [],
   });
-
-  const trialsBySession = new Map<string, typeof trials>();
-  for (const tr of trials) {
-    const list = trialsBySession.get(tr.session_id) ?? [];
-    list.push(tr);
-    trialsBySession.set(tr.session_id, list);
-  }
-
-  const rctSessions: RctSession[] = sessions.map((s) => {
-    const summary = asRecord(s.summary);
-    const sTrials = trialsBySession.get(s.id) ?? [];
-    const targetId = sTrials[0]?.target_id;
-    const note = typeof summary.note === "string" ? summary.note : null;
-    return {
-      date: dayInTz(s.started_at, patient.timezone),
-      targetLabel: (targetId && answerByTarget.get(targetId)) || "target",
-      endReason: endReasonOf(summary),
-      note,
-      annotations: annotationsOf(summary),
-      trials: sTrials.map(
-        (tr): RctTrial => ({
-          intervalSec: tr.interval_sec,
-          outcome: asOutcome(tr.outcome),
-          corrected: tr.corrected,
-          isScreening: tr.is_screening,
-        }),
-      ),
-    };
-  });
-
-  const { config } = defaultsForEtiology(patient.etiology as Etiology);
-  return serializeTrialLog({
-    patientName: patient.display_name,
-    etiology: patient.etiology,
-    config: {
-      baseIntervalSec: config.baseIntervalSec,
-      maxIntervalSec: config.maxIntervalSec,
-      growthFactor: config.growthFactor,
-      masteryStreak: config.masteryStreak,
-      firstGapDays: config.firstGapDays,
-      boosterCadenceDays: config.boosterCadenceDays,
-    },
-    targets: targetStates,
-    sessions: rctSessions,
-  });
-}
-
-async function recordRct(
-  admin: Admin,
-  patient: { id: string; display_name: string; etiology: string; timezone: string },
-): Promise<void> {
-  const dataset = await buildRctDataset(admin, patient);
   const question = "What is the acquisition rate, and is retention decaying between sessions?";
-  const { system, user } = buildRctReportPrompt({ dataset, question, locale: "en" });
-
-  const stream = streamText({ kind: "rct", system, user, maxTokens: 8192, effort: "high" });
-  const text = await readStream(stream);
-  writeTextFixture("rct", text);
+  const result = await runRctReport({ context, question, locale: "en", data });
+  writeStructuredFixture("rct", result);
   console.error("record-fixtures: rct — recorded");
 }
 

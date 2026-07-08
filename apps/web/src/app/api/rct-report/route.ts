@@ -1,23 +1,17 @@
-import {
-  buildRctReportPrompt,
-  type RctAnnotation,
-  type RctSession,
-  type RctTargetState,
-  type RctTrial,
-  serializeTrialLog,
-} from "@keepsake/core/prompts/rct-report";
-import { defaultsForEtiology } from "@keepsake/core/sr";
 import { z } from "zod";
-import { assertAiQuota, QuotaError, streamText } from "@/lib/ai/core";
-import type { Json } from "@/lib/supabase/database.types";
+import { assertAiQuota, QuotaError } from "@/lib/ai/core";
+import { buildRctInputs } from "@/lib/ai/rct-data";
+import { runRctReport } from "@/lib/ai/rct-report";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * POST /api/rct-report — streams a single-subject study report over the caller's real trial logs.
- * Auth-gated + quota-gated; fetches sessions/trials/target_state via the RLS user client (own
- * patient only). Streams RAW UTF-8 text (no SSE framing) so the client reads it with a
- * ReadableStream reader + TextDecoder. Data minimization: only display_name + target text reach
- * the prompt — never emails or ids.
+ * POST /api/rct-report — Claude runs its OWN single-subject analysis (agentic tool-use V2) over the
+ * caller's real trial logs and returns a JSON `{ report, trail }`: the study report plus the
+ * ordered list of analyses Claude chose to run. Auth-gated + quota-gated (one "rct" unit per
+ * report). All reads go through the RLS user client (own patient only) in ONE pass here — that read
+ * is the security boundary; the analysis tools are pure aggregates over it. Data minimization: only
+ * display_name + target text reach the prompt context, and tool results carry numbers/dates/codes
+ * only — never ids, emails, or names.
  */
 
 export const dynamic = "force-dynamic";
@@ -26,51 +20,6 @@ const bodySchema = z.object({ question: z.string().trim().min(5).max(300) }).str
 
 const jsonError = (error: string, status: number) =>
   Response.json({ error }, { status, headers: { "Cache-Control": "no-store" } });
-
-/** ISO instant → YYYY-MM-DD in the patient's timezone (calendar-day rules resolve there). */
-function dayInTz(iso: string, timeZone: string): string {
-  try {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date(iso));
-  } catch {
-    return iso.slice(0, 10);
-  }
-}
-
-function asRecord(json: Json | null | undefined): Record<string, unknown> {
-  return json && typeof json === "object" && !Array.isArray(json)
-    ? (json as Record<string, unknown>)
-    : {};
-}
-
-/** Pull endReason from a session summary (stats or snapshot), tolerating null/legacy shapes. */
-function endReasonOf(summary: Record<string, unknown>): string | null {
-  const stats = asRecord(summary.stats as Json);
-  const snap = asRecord(summary.snapshot as Json);
-  const reason = stats.endReason ?? snap.endReason;
-  return typeof reason === "string" ? reason : null;
-}
-
-function annotationsOf(summary: Record<string, unknown>): RctAnnotation[] {
-  const raw = summary.annotations;
-  if (!Array.isArray(raw)) return [];
-  return raw.map((a) => {
-    const o = asRecord(a as Json);
-    return {
-      kind: typeof o.kind === "string" ? o.kind : "note",
-      note: typeof o.note === "string" ? o.note : undefined,
-      fromSec: typeof o.fromSec === "number" ? o.fromSec : undefined,
-      toSec: typeof o.toSec === "number" ? o.toSec : undefined,
-    };
-  });
-}
-
-const asOutcome = (o: string): RctTrial["outcome"] =>
-  o === "miss" || o === "unclear" ? o : "recall";
 
 export async function POST(request: Request): Promise<Response> {
   let raw: unknown;
@@ -111,11 +60,16 @@ export async function POST(request: Request): Promise<Response> {
     supabase
       .from("targets")
       .select("id, question, answer, status, candidacy")
-      .eq("patient_id", patient.id),
-    supabase.from("target_state").select("*"),
+      .eq("patient_id", patient.id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("target_state")
+      .select(
+        "target_id, last_success_interval_sec, start_streak, bad_sessions, session_count, mastered_at, schedule_mode, between_session_gap_days, booster_step, next_due_at",
+      ),
     supabase
       .from("sessions")
-      .select("id, started_at, summary")
+      .select("id, started_at, affect_pre, affect_post")
       .eq("patient_id", patient.id)
       .order("started_at", { ascending: true }),
   ]);
@@ -123,11 +77,8 @@ export async function POST(request: Request): Promise<Response> {
     return jsonError("The report isn't available right now.", 503);
   }
 
-  const targets = targetsRes.data ?? [];
-  const states = statesRes.data ?? [];
   const sessions = sessionsRes.data ?? [];
   const sessionIds = sessions.map((s) => s.id);
-
   const trialsRes = sessionIds.length
     ? await supabase
         .from("trials")
@@ -136,91 +87,19 @@ export async function POST(request: Request): Promise<Response> {
         .order("at", { ascending: true })
     : { data: [], error: null };
   if (trialsRes.error) return jsonError("The report isn't available right now.", 503);
-  const trials = trialsRes.data ?? [];
 
-  const stateByTarget = new Map(states.map((s) => [s.target_id, s]));
-  const answerByTarget = new Map(targets.map((t) => [t.id, t.answer]));
-
-  const targetStates: RctTargetState[] = targets.map((t) => {
-    const st = stateByTarget.get(t.id);
-    return {
-      question: t.question,
-      answer: t.answer,
-      status: t.status,
-      candidacy: t.candidacy,
-      lastSuccessIntervalSec: st?.last_success_interval_sec ?? null,
-      startStreak: st?.start_streak ?? 0,
-      badSessions: st?.bad_sessions ?? 0,
-      sessionCount: st?.session_count ?? 0,
-      mastered: st?.mastered_at != null,
-      scheduleMode: st?.schedule_mode ?? null,
-      betweenSessionGapDays: st?.between_session_gap_days ?? null,
-      boosterStep: st?.booster_step ?? null,
-      nextDueAt: st?.next_due_at ? dayInTz(st.next_due_at, patient.timezone) : null,
-    };
+  const { context, data } = buildRctInputs({
+    patient,
+    targets: targetsRes.data ?? [],
+    states: statesRes.data ?? [],
+    sessions,
+    trials: trialsRes.data ?? [],
   });
 
-  const trialsBySession = new Map<string, typeof trials>();
-  for (const tr of trials) {
-    const list = trialsBySession.get(tr.session_id) ?? [];
-    list.push(tr);
-    trialsBySession.set(tr.session_id, list);
+  try {
+    const result = await runRctReport({ context, question, locale: "en", data });
+    return Response.json(result, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return jsonError("The report isn't available right now.", 503);
   }
-
-  const rctSessions: RctSession[] = sessions.map((s) => {
-    const summary = asRecord(s.summary);
-    const sTrials = trialsBySession.get(s.id) ?? [];
-    const targetId = sTrials[0]?.target_id;
-    const note = typeof summary.note === "string" ? summary.note : null;
-    return {
-      date: dayInTz(s.started_at, patient.timezone),
-      targetLabel: (targetId && answerByTarget.get(targetId)) || "target",
-      endReason: endReasonOf(summary),
-      note,
-      annotations: annotationsOf(summary),
-      trials: sTrials.map(
-        (tr): RctTrial => ({
-          intervalSec: tr.interval_sec,
-          outcome: asOutcome(tr.outcome),
-          corrected: tr.corrected,
-          isScreening: tr.is_screening,
-        }),
-      ),
-    };
-  });
-
-  const { config } = defaultsForEtiology(patient.etiology);
-  const dataset = serializeTrialLog({
-    patientName: patient.display_name,
-    etiology: patient.etiology,
-    config: {
-      baseIntervalSec: config.baseIntervalSec,
-      maxIntervalSec: config.maxIntervalSec,
-      growthFactor: config.growthFactor,
-      masteryStreak: config.masteryStreak,
-      firstGapDays: config.firstGapDays,
-      boosterCadenceDays: config.boosterCadenceDays,
-    },
-    targets: targetStates,
-    sessions: rctSessions,
-  });
-
-  const { system, user: userMessage } = buildRctReportPrompt({ dataset, question, locale: "en" });
-
-  const stream = streamText({
-    kind: "rct",
-    system,
-    user: userMessage,
-    maxTokens: 8192,
-    effort: "high",
-  });
-
-  return new Response(stream, {
-    status: 200,
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "X-Content-Type-Options": "nosniff",
-      "Cache-Control": "no-store",
-    },
-  });
 }

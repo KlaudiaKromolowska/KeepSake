@@ -5,30 +5,34 @@ import { REVIEW_COPY } from "@/lib/review/copy";
 import { parseMarkdown } from "@/lib/review/markdown";
 import { MarkdownView } from "./markdown-view";
 
-type Status = "idle" | "streaming" | "done" | "error";
+type Status = "idle" | "loading" | "done" | "error";
+type TrailEntry = { tool: string; description: string };
 
 /**
- * Question input + streamed study report. POSTs /api/rct-report and reads the raw text/plain body
- * with a ReadableStream reader + TextDecoder, re-parsing the markdown as chunks land. Rendering is
- * element-based (MarkdownView) — no dangerouslySetInnerHTML anywhere.
+ * Question input + agentic study report. POSTs /api/rct-report, which runs Claude's own analysis
+ * (tool-use loop) server-side and returns JSON `{ report, trail }`. We render the markdown report
+ * (element-based via MarkdownView — no dangerouslySetInnerHTML) plus the ordered "analyses run"
+ * trail as the proof-of-agency section.
  */
 export function ReportPanel() {
   const [question, setQuestion] = useState<string>(REVIEW_COPY.suggestedQuestion);
   const [report, setReport] = useState("");
+  const [trail, setTrail] = useState<TrailEntry[]>([]);
   const [status, setStatus] = useState<Status>("idle");
   const [errorText, setErrorText] = useState<string>(REVIEW_COPY.errors.generic);
   const [copied, setCopied] = useState<"idle" | "ok" | "failed">("idle");
-  // Guards against a stale stream writing after a newer Analyze click.
+  // Guards against a stale response writing after a newer Analyze click.
   const runIdRef = useRef(0);
 
   const trimmed = question.trim();
-  const canAnalyze = trimmed.length >= 5 && trimmed.length <= 300 && status !== "streaming";
+  const canAnalyze = trimmed.length >= 5 && trimmed.length <= 300 && status !== "loading";
 
   async function analyze() {
     if (!canAnalyze) return;
     const runId = ++runIdRef.current;
-    setStatus("streaming");
+    setStatus("loading");
     setReport("");
+    setTrail([]);
     setCopied("idle");
 
     try {
@@ -38,7 +42,7 @@ export function ReportPanel() {
         body: JSON.stringify({ question: trimmed }),
       });
 
-      if (!res.ok || !res.body) {
+      if (!res.ok) {
         const fallback =
           res.status === 401
             ? REVIEW_COPY.errors.signedOut
@@ -60,19 +64,15 @@ export function ReportPanel() {
         return;
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let text = "";
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        text += decoder.decode(value, { stream: true });
-        if (runIdRef.current !== runId) return;
-        setReport(text);
-      }
-      text += decoder.decode();
+      const body = (await res.json()) as { report?: string; trail?: TrailEntry[] };
       if (runIdRef.current !== runId) return;
-      setReport(text);
+      if (typeof body.report !== "string") {
+        setErrorText(REVIEW_COPY.errors.generic);
+        setStatus("error");
+        return;
+      }
+      setReport(body.report);
+      setTrail(Array.isArray(body.trail) ? body.trail : []);
       setStatus("done");
     } catch {
       if (runIdRef.current !== runId) return;
@@ -91,6 +91,8 @@ export function ReportPanel() {
   }
 
   const blocks = parseMarkdown(report);
+  // Precompute keys so no raw array index reaches a key prop (matches MarkdownView).
+  const trailItems = trail.map((entry, i) => ({ entry, key: `${entry.tool}-${i}` }));
 
   return (
     <div className="flex w-full max-w-3xl flex-col gap-6">
@@ -113,7 +115,7 @@ export function ReportPanel() {
             disabled={!canAnalyze}
             className="min-h-[48px] rounded-xl border-2 border-zinc-900 bg-zinc-900 px-8 text-lg font-medium text-white focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:opacity-50"
           >
-            {status === "streaming" ? REVIEW_COPY.analyzing : REVIEW_COPY.analyze}
+            {status === "loading" ? REVIEW_COPY.analyzing : REVIEW_COPY.analyze}
           </button>
           {trimmed.length > 0 && trimmed.length < 5 && (
             <span role="status" className="text-base text-zinc-700">
@@ -146,17 +148,28 @@ export function ReportPanel() {
         <div
           role="log"
           aria-live="polite"
-          aria-busy={status === "streaming"}
+          aria-busy={status === "loading"}
           className="min-h-[160px] text-lg"
         >
           {blocks.length > 0 ? (
             <MarkdownView blocks={blocks} />
           ) : (
             <p className="text-zinc-500">
-              {status === "streaming" ? REVIEW_COPY.analyzing : REVIEW_COPY.reportPlaceholder}
+              {status === "loading" ? REVIEW_COPY.analyzing : REVIEW_COPY.reportPlaceholder}
             </p>
           )}
         </div>
+        {status === "done" && trail.length > 0 && (
+          <div className="mt-6 border-t border-zinc-200 pt-4">
+            <h3 className="text-base font-semibold text-zinc-800">{REVIEW_COPY.trailLabel}</h3>
+            <p className="mt-1 text-base text-zinc-600">{REVIEW_COPY.trailIntro}</p>
+            <ol className="mt-3 list-decimal space-y-1 pl-6 text-base text-zinc-700">
+              {trailItems.map(({ entry, key }) => (
+                <li key={key}>{entry.description}</li>
+              ))}
+            </ol>
+          </div>
+        )}
         {status === "done" && report && (
           <div className="mt-6 flex flex-wrap items-center gap-4 border-t border-zinc-200 pt-4">
             <button

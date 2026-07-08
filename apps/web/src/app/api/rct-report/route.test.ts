@@ -1,19 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Mock the AI core: quota + streaming never touch the network or a key.
-const { assertAiQuotaMock, streamTextMock, QuotaErrorClass } = vi.hoisted(() => {
+// Mock the AI core (quota) and the agentic report runner: no network, no key, no loop.
+const { assertAiQuotaMock, QuotaErrorClass } = vi.hoisted(() => {
   class QuotaErrorClass extends Error {}
-  return {
-    assertAiQuotaMock: vi.fn(async () => undefined),
-    streamTextMock: vi.fn(),
-    QuotaErrorClass,
-  };
+  return { assertAiQuotaMock: vi.fn(async () => undefined), QuotaErrorClass };
 });
 vi.mock("@/lib/ai/core", () => ({
   assertAiQuota: assertAiQuotaMock,
-  streamText: streamTextMock,
   QuotaError: QuotaErrorClass,
 }));
+
+const { runRctReportMock } = vi.hoisted(() => ({ runRctReportMock: vi.fn() }));
+vi.mock("@/lib/ai/rct-report", () => ({ runRctReport: runRctReportMock }));
 
 const { createClientMock } = vi.hoisted(() => ({ createClientMock: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: createClientMock }));
@@ -70,44 +68,29 @@ function post(body: unknown): Request {
 beforeEach(() => {
   vi.clearAllMocks();
   assertAiQuotaMock.mockResolvedValue(undefined);
-  streamTextMock.mockReturnValue(
-    new ReadableStream<Uint8Array>({
-      start(c) {
-        c.enqueue(new TextEncoder().encode("## Summary\nok"));
-        c.close();
-      },
-    }),
-  );
+  runRctReportMock.mockResolvedValue({
+    report: "## Summary\nok",
+    trail: [{ tool: "get_trial_counts", description: "Counted trials and outcomes per session" }],
+  });
   createClientMock.mockResolvedValue(fakeSupabase({}));
 });
 afterEach(() => vi.restoreAllMocks());
 
 describe("POST /api/rct-report — input validation", () => {
   it("400 on invalid JSON body", async () => {
-    const res = await POST(post("not json{"));
-    expect(res.status).toBe(400);
+    expect((await POST(post("not json{"))).status).toBe(400);
   });
 
-  it("400 when the question is too short", async () => {
-    const res = await POST(post({ question: "hi" }));
-    expect(res.status).toBe(400);
-    expect(await res.json()).toHaveProperty("error");
+  it("400 when the question is too short / too long / has extra keys", async () => {
+    expect((await POST(post({ question: "hi" }))).status).toBe(400);
+    expect((await POST(post({ question: "x".repeat(301) }))).status).toBe(400);
+    expect((await POST(post({ question: "valid question here", evil: true }))).status).toBe(400);
   });
 
-  it("400 when the question is too long", async () => {
-    const res = await POST(post({ question: "x".repeat(301) }));
-    expect(res.status).toBe(400);
-  });
-
-  it("400 on unexpected extra keys (strict schema)", async () => {
-    const res = await POST(post({ question: "valid question here", evil: true }));
-    expect(res.status).toBe(400);
-  });
-
-  it("does not call the AI core on invalid input", async () => {
+  it("does not run quota or the report on invalid input", async () => {
     await POST(post({ question: "hi" }));
     expect(assertAiQuotaMock).not.toHaveBeenCalled();
-    expect(streamTextMock).not.toHaveBeenCalled();
+    expect(runRctReportMock).not.toHaveBeenCalled();
   });
 });
 
@@ -116,14 +99,15 @@ describe("POST /api/rct-report — auth & quota", () => {
     createClientMock.mockResolvedValue(fakeSupabase({ user: null }));
     const res = await POST(post({ question: "What is the acquisition rate?" }));
     expect(res.status).toBe(401);
-    expect(streamTextMock).not.toHaveBeenCalled();
+    expect(runRctReportMock).not.toHaveBeenCalled();
   });
 
-  it("429 when the quota is exhausted", async () => {
+  it("429 when the quota is exhausted (one 'rct' unit per report)", async () => {
     assertAiQuotaMock.mockRejectedValue(new QuotaErrorClass("limit reached"));
     const res = await POST(post({ question: "What is the acquisition rate?" }));
     expect(res.status).toBe(429);
-    expect(streamTextMock).not.toHaveBeenCalled();
+    expect(assertAiQuotaMock).toHaveBeenCalledWith(expect.anything(), "rct");
+    expect(runRctReportMock).not.toHaveBeenCalled();
   });
 
   it("404 when the caller has no patient/data", async () => {
@@ -134,27 +118,32 @@ describe("POST /api/rct-report — auth & quota", () => {
 });
 
 describe("POST /api/rct-report — success", () => {
-  it("streams text/plain with nosniff and calls streamText with rct/high", async () => {
+  it("returns JSON { report, trail } and runs the agent over the caller's context", async () => {
     const res = await POST(post({ question: "What is the acquisition rate?" }));
     expect(res.status).toBe(200);
-    expect(res.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
-    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
-    expect(await res.text()).toContain("## Summary");
+    expect(res.headers.get("Content-Type")).toContain("application/json");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    const body = (await res.json()) as { report: string; trail: unknown[] };
+    expect(body.report).toContain("## Summary");
+    expect(body.trail).toHaveLength(1);
 
-    const opts = streamTextMock.mock.calls[0][0];
-    expect(opts.kind).toBe("rct");
-    expect(opts.effort).toBe("high");
-    expect(opts.maxTokens).toBe(8192);
-    // Data minimization: the untrusted question rides in the user message, not the system prompt.
-    expect(opts.user).toContain("What is the acquisition rate?");
-    expect(opts.user).toContain("PATIENT: Marta");
+    const opts = runRctReportMock.mock.calls[0][0];
+    expect(opts.question).toBe("What is the acquisition rate?");
+    expect(opts.locale).toBe("en");
+    // Data minimization: display_name reaches the prompt context; the untrusted question is separate.
+    expect(opts.context).toContain("PATIENT: Marta");
+    expect(opts.data).toBeDefined();
   });
 
   it("503 when a data read fails", async () => {
     createClientMock.mockResolvedValue(
       fakeSupabase({ tables: { sessions: { data: null, error: { message: "boom" } } } }),
     );
-    const res = await POST(post({ question: "What is the acquisition rate?" }));
-    expect(res.status).toBe(503);
+    expect((await POST(post({ question: "What is the acquisition rate?" }))).status).toBe(503);
+  });
+
+  it("503 when the agentic report fails", async () => {
+    runRctReportMock.mockRejectedValue(new Error("model unavailable"));
+    expect((await POST(post({ question: "What is the acquisition rate?" }))).status).toBe(503);
   });
 });

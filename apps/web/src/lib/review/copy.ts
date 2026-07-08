@@ -10,8 +10,11 @@ export const REVIEW_COPY = {
   questionLabel: "Your question",
   questionPlaceholder: "Ask about acquisition, recovery after a miss, the interval reached…",
   analyze: "Analyze",
-  analyzing: "Reading the trial logs…",
+  analyzing: "Claude is running its analyses…",
   reportLabel: "Study report",
+  trailLabel: "How this report was produced",
+  trailIntro:
+    "Claude chose and ran these analyses over the trial logs, then wrote the report from what they returned:",
   copy: "Copy report",
   copied: "Copied",
   copyFailed: "Couldn't copy — select the text to copy it manually.",
