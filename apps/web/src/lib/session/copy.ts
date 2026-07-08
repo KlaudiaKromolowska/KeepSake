@@ -53,8 +53,17 @@ export const SESSION_COPY = {
     answerCardSave: "Log the card",
   },
   preSession: {
+    heading: "Ready when you are",
+    prompt: "When you're both settled, tap to begin. There's no rush.",
     begin: "Begin today's session",
     resume: "Resume this morning's session",
+    noTarget: "There's nothing set up to practise just yet.",
+    startError: "Couldn't start just now — please try again.",
+  },
+  dashboard: {
+    startTitle: "Start today's session",
+    startHint: "A few gentle minutes together.",
+    noTarget: "No memory is ready to practise yet.",
   },
   shared: {
     endSession: "End session",
