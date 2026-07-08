@@ -90,6 +90,7 @@ export default async function SessionPage() {
         question={target.question}
         resumeAvailable={resumeAvailable}
         distractorPrompts={distractorPrompts}
+        demoAudio={process.env.DEMO_MODE === "1"}
         speechEnabled={speechEnabled}
       />
     </main>
