@@ -22,6 +22,7 @@ const TZ = "Europe/Warsaw";
 const config = defaultsForEtiology("alzheimers").config;
 
 const TARGET_ID = "22222222-2222-4222-8222-222222222222";
+const OTHER_TARGET_ID = "33333333-3333-4333-8333-333333333333";
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 
 /** Chainable, thenable Supabase stub. Every test supplies a `route(state)` → `{ data, error }`. */
@@ -189,7 +190,10 @@ describe("startSessionAction", () => {
         return { data: { timezone: TZ, etiology: "alzheimers" }, error: null };
       if (s.table === "sessions" && s.verb === "select")
         return {
-          data: { id: "open-1", summary: { snapshot: openSnap, startProbe: true } },
+          data: {
+            id: "open-1",
+            summary: { snapshot: openSnap, startProbe: true, targetId: TARGET_ID },
+          },
           error: null,
         };
       if (s.table === "sessions" && s.verb === "update") return { data: null, error: null };
@@ -270,6 +274,67 @@ describe("startSessionAction", () => {
     expect(result.data?.resumed).toBe(false);
     const close = calls.find((c) => c.table === "sessions" && c.verb === "update");
     expect((close?.payload as { summary: { discarded: boolean } }).summary.discarded).toBe(true);
+  });
+
+  it("open session for a DIFFERENT target → discarded + fresh start (no cross-target resume)", async () => {
+    // A valid, same-day, resumable snapshot — but pinned to another target in summary.targetId.
+    const otherSnap = startSession(
+      {
+        lastSuccessSec: 30,
+        startStreak: 1,
+        lastStartSuccessDay: null,
+        badSessions: 0,
+        mastered: false,
+        sessionCount: 2,
+      },
+      { at: NOW, timeZone: TZ },
+      config,
+    );
+    const { client, calls } = makeSupabase((s) => {
+      if (s.table === "targets") return { data: activeTarget, error: null };
+      if (s.table === "patients")
+        return { data: { timezone: TZ, etiology: "alzheimers" }, error: null };
+      if (s.table === "sessions" && s.verb === "select")
+        return {
+          data: {
+            id: "open-1",
+            summary: { snapshot: otherSnap, startProbe: true, targetId: OTHER_TARGET_ID },
+          },
+          error: null,
+        };
+      if (s.table === "sessions" && s.verb === "update") return { data: null, error: null };
+      if (s.table === "target_state") return { data: null, error: null };
+      if (s.table === "sessions" && s.verb === "insert")
+        return { data: { id: "sess-new" }, error: null };
+      return { data: null, error: null };
+    });
+    mockUser(client);
+
+    const result = await startSessionAction({ targetId: TARGET_ID });
+
+    expect(result.error).toBeNull();
+    expect(result.data?.resumed).toBe(false);
+    expect(result.data?.sessionId).toBe("sess-new");
+    const close = calls.find((c) => c.table === "sessions" && c.verb === "update");
+    expect((close?.payload as { summary: { discarded: boolean } }).summary.discarded).toBe(true);
+  });
+
+  it("open-session read error → error result, no insert (fail closed)", async () => {
+    const { client, calls } = makeSupabase((s) => {
+      if (s.table === "targets") return { data: activeTarget, error: null };
+      if (s.table === "patients")
+        return { data: { timezone: TZ, etiology: "alzheimers" }, error: null };
+      if (s.table === "sessions" && s.verb === "select")
+        return { data: null, error: { message: "boom" } };
+      return { data: null, error: null };
+    });
+    mockUser(client);
+
+    const result = await startSessionAction({ targetId: TARGET_ID });
+
+    expect(result.data).toBeNull();
+    expect(typeof result.error).toBe("string");
+    expect(calls.some((c) => c.table === "sessions" && c.verb === "insert")).toBe(false);
   });
 
   it("target not active/maintenance → error result, no insert", async () => {
@@ -527,6 +592,62 @@ describe("endSessionAction", () => {
     expect(p.schedule_mode).toBe("between");
     expect(p.between_session_gap_days).toBe(2);
     expect(p.next_due_at).toBe(existingDue);
+  });
+
+  it("(retry heal) already-ended with stored applied values → re-applies them, no recompute", async () => {
+    // Simulates a retry after the target_state upsert failed on the first attempt but the
+    // sessions-close (single commit point) had already stored the applied bundle. The heal must
+    // write the STORED gap (3), never re-grow it from a re-read state, and must not re-read
+    // patients/target_state or re-close the session.
+    const storedSchedule = {
+      schedule_mode: "between",
+      between_session_gap_days: 3,
+      booster_step: 0,
+      next_due_at: "2023-11-17T00:00:00.000Z",
+    };
+    const storedProgress = {
+      last_success_interval_sec: 60,
+      start_streak: 2,
+      last_start_success_day: "2023-11-14",
+      bad_sessions: 0,
+      session_count: 3,
+    };
+    const { client, calls } = endClient(
+      {
+        ended_at: new Date(NOW).toISOString(),
+        summary: {
+          startProbe: true,
+          snapshot: {},
+          stats: {},
+          appliedSchedule: storedSchedule,
+          appliedProgress: storedProgress,
+          appliedMasteredAt: null,
+          appliedTargetStatus: null,
+        },
+        patient_id: "p-1",
+      },
+      null,
+    );
+    mockUser(client);
+    const result = await endSessionAction({
+      sessionId: SESSION_ID,
+      targetId: TARGET_ID,
+      snapshot: snap(),
+    });
+    expect(result).toEqual({ data: null, error: null });
+    // Heal path recomputes nothing → skips patients + target_state read + sessions re-close.
+    expect(calls.some((c) => c.table === "patients")).toBe(false);
+    expect(calls.some((c) => c.table === "target_state" && c.verb === "select")).toBe(false);
+    expect(calls.some((c) => c.table === "sessions" && c.verb === "update")).toBe(false);
+    const ts = calls.find((c) => c.table === "target_state" && c.verb === "upsert");
+    const p = ts?.payload as Record<string, unknown>;
+    expect(p.target_id).toBe(TARGET_ID);
+    expect(p.between_session_gap_days).toBe(3); // stored value, NOT a re-grown 5
+    expect(p.next_due_at).toBe("2023-11-17T00:00:00.000Z");
+    expect(p.session_count).toBe(3);
+    expect(p.mastered_at).toBeNull();
+    // status untouched when not mastered
+    expect(calls.some((c) => c.table === "targets" && c.verb === "update")).toBe(false);
   });
 });
 

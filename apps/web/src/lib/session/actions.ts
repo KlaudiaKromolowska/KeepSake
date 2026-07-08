@@ -14,7 +14,7 @@ import {
 } from "@keepsake/core/sr";
 import type { ActionResult } from "@/lib/actions";
 import { failAction, requireUser } from "@/lib/actions";
-import type { Json, Tables } from "@/lib/supabase/database.types";
+import type { Json, Tables, TablesInsert } from "@/lib/supabase/database.types";
 import {
   annotateSessionInputSchema,
   endSessionInputSchema,
@@ -112,7 +112,7 @@ export async function startSessionAction(
     imageUrl: target.image_url,
   };
 
-  const { data: open } = await supabase
+  const { data: open, error: openErr } = await supabase
     .from("sessions")
     .select("id, summary")
     .eq("patient_id", target.patient_id)
@@ -120,11 +120,20 @@ export async function startSessionAction(
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  // Fail closed: a transient read error must not fall through to a second session insert.
+  if (openErr)
+    return failAction("startSession: open lookup", openErr, "Could not start the session.");
 
   if (open) {
     const summary = asRecord(open.summary);
     const snap = sessionStateSchema.safeParse(summary.snapshot);
-    if (snap.success && canResume(snap.data as SessionState, now)) {
+    // Resume ONLY the requested target's own open session (sessions has no target_id column;
+    // the target is pinned in summary.targetId). A mismatched/legacy targetId → graceful discard.
+    if (
+      summary.targetId === targetId &&
+      snap.success &&
+      canResume(snap.data as SessionState, now)
+    ) {
       const state = resumeSession(snap.data as SessionState, now, config);
       if (state) {
         const { error } = await supabase
@@ -164,7 +173,7 @@ export async function startSessionAction(
     .insert({
       patient_id: target.patient_id,
       started_at: iso(now),
-      summary: toJson({ snapshot: state, startProbe: state.isStartProbe }),
+      summary: toJson({ targetId, snapshot: state, startProbe: state.isStartProbe }),
     })
     .select("id")
     .single();
@@ -213,6 +222,60 @@ export async function recordTrialAction(input: unknown): Promise<ActionResult<nu
   return { data: null, error: null };
 }
 
+type ActionSupabase = Awaited<ReturnType<typeof requireUser>>["supabase"];
+
+/**
+ * The fully-precomputed target_state/targets writes an end-session commit needs. Stored in the
+ * session summary at the single commit point (the `sessions` close) so a retry after a partial
+ * failure re-applies the SAME values — never recomputes schedule growth from an already-grown gap.
+ */
+interface AppliedEndState {
+  appliedSchedule: {
+    schedule_mode: string;
+    between_session_gap_days: number;
+    booster_step: number;
+    next_due_at: string;
+  } | null;
+  appliedProgress: {
+    last_success_interval_sec: number | null;
+    start_streak: number;
+    last_start_success_day: string | null;
+    bad_sessions: number;
+    session_count: number;
+  };
+  appliedMasteredAt: string | null;
+  appliedTargetStatus: "mastered" | null;
+}
+
+/** Step 3 of endSession: write target_state (+ targets.status) FROM stored applied values only. */
+async function applyEndState(
+  supabase: ActionSupabase,
+  targetId: string,
+  applied: AppliedEndState,
+): Promise<ActionResult<null>> {
+  const payload: TablesInsert<"target_state"> = {
+    target_id: targetId,
+    ...applied.appliedProgress,
+    mastered_at: applied.appliedMasteredAt,
+    ...(applied.appliedSchedule ?? {}),
+  };
+  const { error: stateErr } = await supabase
+    .from("target_state")
+    .upsert(payload, { onConflict: "target_id" });
+  if (stateErr)
+    return failAction("endSession: target_state", stateErr, "Could not close the session.");
+
+  if (applied.appliedTargetStatus) {
+    const { error: statusErr } = await supabase
+      .from("targets")
+      .update({ status: applied.appliedTargetStatus })
+      .eq("id", targetId);
+    if (statusErr)
+      return failAction("endSession: status", statusErr, "Could not close the session.");
+  }
+  return { data: null, error: null };
+}
+
 export async function endSessionAction(input: unknown): Promise<ActionResult<null>> {
   const parsed = endSessionInputSchema.safeParse(input);
   if (!parsed.success) return { data: null, error: zerr(parsed.error.issues) };
@@ -233,9 +296,23 @@ export async function endSessionAction(input: unknown): Promise<ActionResult<nul
   if (sessionErr || !sessionRow) {
     return failAction("endSession: read", sessionErr, "Could not close the session.");
   }
-  if (sessionRow.ended_at) return { data: null, error: null }; // idempotent no-op
 
   const summary = asRecord(sessionRow.summary);
+
+  // Idempotent heal: the session was already closed (the single commit point). If the applied
+  // values were stored, re-run step 3 from them (a prior partial failure left target_state
+  // unwritten); a retry re-applies the SAME values instead of re-growing the schedule. A legacy
+  // row without them → the old plain no-op.
+  if (sessionRow.ended_at) {
+    if (!("appliedSchedule" in summary)) return { data: null, error: null };
+    return applyEndState(supabase, targetId, {
+      appliedSchedule: (summary.appliedSchedule as AppliedEndState["appliedSchedule"]) ?? null,
+      appliedProgress: summary.appliedProgress as AppliedEndState["appliedProgress"],
+      appliedMasteredAt: (summary.appliedMasteredAt as string | null) ?? null,
+      appliedTargetStatus: (summary.appliedTargetStatus as "mastered" | null) ?? null,
+    });
+  }
+
   const startProbe = summary.startProbe === true;
 
   const { data: patient, error: patientErr } = await supabase
@@ -248,11 +325,18 @@ export async function endSessionAction(input: unknown): Promise<ActionResult<nul
   }
   const { config } = defaultsForEtiology(patient.etiology);
 
-  const { data: stateRow } = await supabase
+  const { data: stateRow, error: stateReadErr } = await supabase
     .from("target_state")
     .select("*")
     .eq("target_id", targetId)
     .maybeSingle();
+  // Fail closed: a transient read error must not re-initialise a schedule from a zeroed target.
+  if (stateReadErr)
+    return failAction(
+      "endSession: target_state read",
+      stateReadErr,
+      "Could not close the session.",
+    );
 
   const existing: ScheduleState | null = stateRow?.schedule_mode
     ? {
@@ -274,61 +358,54 @@ export async function endSessionAction(input: unknown): Promise<ActionResult<nul
   }
 
   const { progress } = snapshot;
-  const masteredAt =
-    progress.mastered && !stateRow?.mastered_at ? iso(at) : (stateRow?.mastered_at ?? null);
+  const count = (o: SessionState["trials"][number]["outcome"]) =>
+    snapshot.trials.filter((t) => t.outcome === o).length;
 
-  const stateUpdate: Record<string, unknown> = {
-    target_id: targetId,
-    last_success_interval_sec: progress.lastSuccessSec,
-    start_streak: progress.startStreak,
-    last_start_success_day: progress.lastStartSuccessDay,
-    bad_sessions: progress.badSessions,
-    session_count: progress.sessionCount,
-    mastered_at: masteredAt,
-    ...(sched
+  // Everything step 3 needs, precomputed from the pre-state row so the heal path can replay it.
+  const applied: AppliedEndState = {
+    appliedSchedule: sched
       ? {
           schedule_mode: sched.mode,
           between_session_gap_days: sched.gapDays,
           booster_step: sched.boosterStep,
           next_due_at: iso(sched.nextDueAt),
         }
-      : {}),
-  };
-  const { error: stateErr } = await supabase
-    .from("target_state")
-    .upsert(stateUpdate as never, { onConflict: "target_id" });
-  if (stateErr)
-    return failAction("endSession: target_state", stateErr, "Could not close the session.");
-
-  if (progress.mastered) {
-    const { error: statusErr } = await supabase
-      .from("targets")
-      .update({ status: "mastered" })
-      .eq("id", targetId);
-    if (statusErr)
-      return failAction("endSession: status", statusErr, "Could not close the session.");
-  }
-
-  const count = (o: SessionState["trials"][number]["outcome"]) =>
-    snapshot.trials.filter((t) => t.outcome === o).length;
-  const endSummary = {
-    ...summary,
-    snapshot,
-    stats: {
-      recalls: count("recall"),
-      misses: count("miss"),
-      unclears: count("unclear"),
-      endReason: snapshot.endReason,
-      rescopeRequired: snapshot.rescopeRequired,
+      : null,
+    appliedProgress: {
+      last_success_interval_sec: progress.lastSuccessSec,
+      start_streak: progress.startStreak,
+      last_start_success_day: progress.lastStartSuccessDay,
+      bad_sessions: progress.badSessions,
+      session_count: progress.sessionCount,
     },
+    appliedMasteredAt:
+      progress.mastered && !stateRow?.mastered_at ? iso(at) : (stateRow?.mastered_at ?? null),
+    appliedTargetStatus: progress.mastered ? "mastered" : null,
   };
+
+  // Step 2 — the single commit point. Close the session and store the applied bundle atomically
+  // BEFORE touching target_state, so a failure past here retries into the heal path above.
   const { error: closeErr } = await supabase
     .from("sessions")
-    .update({ ended_at: iso(at), summary: toJson(endSummary) })
+    .update({
+      ended_at: iso(at),
+      summary: toJson({
+        ...summary,
+        snapshot,
+        stats: {
+          recalls: count("recall"),
+          misses: count("miss"),
+          unclears: count("unclear"),
+          endReason: snapshot.endReason,
+          rescopeRequired: snapshot.rescopeRequired,
+        },
+        ...applied,
+      }),
+    })
     .eq("id", sessionId);
   if (closeErr) return failAction("endSession: close", closeErr, "Could not close the session.");
 
-  return { data: null, error: null };
+  return applyEndState(supabase, targetId, applied);
 }
 
 export async function saveSessionNoteAction(input: unknown): Promise<ActionResult<null>> {
