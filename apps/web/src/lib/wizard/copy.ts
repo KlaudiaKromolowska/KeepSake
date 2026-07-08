@@ -17,6 +17,13 @@ export const WIZARD_COPY = {
     generating: "Claude is thinking this through…",
     generatingHint: "Drafting a question, then checking it against the practice rules.",
   },
+  dictation: {
+    start: "Speak it instead",
+    stop: "Stop speaking",
+    listening: "Listening — take your time…",
+    liveLabel: "What we're hearing",
+    unavailable: "Speaking isn't available on this device — you can type it instead.",
+  },
   proposal: {
     heading: "Here's a memory target",
     questionLabel: "The question to ask",

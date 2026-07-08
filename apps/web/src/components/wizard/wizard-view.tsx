@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createTargetAction, generateTargetAction } from "@/lib/wizard/actions";
 import { WIZARD_COPY } from "@/lib/wizard/copy";
+import { joinPhrase } from "@/lib/wizard/dictation";
 import type { WizardProposal } from "@/lib/wizard/schema";
+import { DictationControl } from "./dictation-control";
 import { HandEntryForm } from "./hand-entry-form";
 import { PhotoQaSection } from "./photo-qa-card";
 import { ProposalCard } from "./proposal-card";
@@ -115,6 +117,12 @@ export function WizardView({ photoOptions }: { photoOptions: string[] }) {
             setGenError(null);
           }}
           className="min-h-[120px] w-full rounded-xl border-2 border-zinc-400 p-3 text-lg text-zinc-900"
+        />
+        <DictationControl
+          onTranscript={(text) => {
+            setDescription((d) => joinPhrase(d, text).slice(0, 500));
+            setGenError(null);
+          }}
         />
         <button
           type="button"
