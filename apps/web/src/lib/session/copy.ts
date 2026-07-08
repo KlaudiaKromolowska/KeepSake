@@ -34,6 +34,7 @@ export const SESSION_COPY = {
     hint: "Keep chatting — the screen will tell you when it's time.",
     adjustWait: "Adjust wait",
     adjustWaitHint: "Pick a different wait if it suits the moment.",
+    waiting: "Waiting",
   },
   ended: {
     heading: "Session complete",

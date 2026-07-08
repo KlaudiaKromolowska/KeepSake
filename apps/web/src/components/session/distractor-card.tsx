@@ -45,10 +45,11 @@ export function DistractorCard({
     return () => clearInterval(id);
   }, [wait]);
 
+  const safeDurationMs = Math.max(wait.durationMs, 1);
   const elapsedMs = Math.min(Math.max(now - wait.startedAtMs, 0), wait.durationMs);
-  const remainingFraction = 1 - elapsedMs / wait.durationMs;
+  const remainingFraction = 1 - elapsedMs / safeDurationMs;
   const remainingRealSec = Math.ceil(wait.intervalSec * remainingFraction);
-  const progressPct = (elapsedMs / wait.durationMs) * 100;
+  const progressPct = (elapsedMs / safeDurationMs) * 100;
 
   return (
     <section className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-white px-6 text-center text-zinc-900">
@@ -74,7 +75,7 @@ export function DistractorCard({
           </div>
         </div>
         <span role="status" className="sr-only">
-          Waiting
+          {SESSION_COPY.distractor.waiting}
         </span>
       </div>
 
@@ -102,7 +103,7 @@ export function DistractorCard({
                       onOverride(sec);
                       setAdjustOpen(false);
                     }}
-                    className={`min-h-[64px] rounded-2xl border-2 px-6 text-xl font-medium focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 ${
+                    className={`min-h-[64px] rounded-2xl border-2 px-6 text-2xl font-medium focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 ${
                       isCurrent
                         ? "border-zinc-900 bg-zinc-100 text-zinc-900"
                         : "border-zinc-300 bg-white text-zinc-700"

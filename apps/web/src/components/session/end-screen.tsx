@@ -81,7 +81,7 @@ export function EndScreen({
               <button
                 type="button"
                 onClick={handleSave}
-                className="min-h-[64px] rounded-2xl border-2 border-zinc-500 bg-zinc-50 px-6 text-xl font-medium text-zinc-900 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+                className="min-h-[64px] rounded-2xl border-2 border-zinc-500 bg-zinc-50 px-6 text-2xl font-medium text-zinc-900 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
               >
                 {SESSION_COPY.shared.retry}
               </button>
