@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/actions";
 import { signOut } from "@/lib/auth/actions";
 import { PROGRESS_COPY } from "@/lib/progress/copy";
 import { REVIEW_COPY } from "@/lib/review/copy";
+import { SCHEDULE_PLAN_COPY } from "@/lib/schedule/copy";
 import { dueStatus, dueStatusLine } from "@/lib/schedule/due-status";
 import { SESSION_COPY } from "@/lib/session/copy";
 import { WIZARD_COPY } from "@/lib/wizard/copy";
@@ -62,6 +63,15 @@ export default async function DashboardPage() {
           </Link>
         ) : (
           <p className="text-xl text-zinc-700">{SESSION_COPY.dashboard.noTarget}</p>
+        )}
+
+        {target && (
+          <Link
+            href="/schedule"
+            className="-mt-4 flex min-h-[48px] items-center text-lg text-zinc-600 underline underline-offset-4 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+          >
+            {SCHEDULE_PLAN_COPY.cardHint}
+          </Link>
         )}
 
         <Link
