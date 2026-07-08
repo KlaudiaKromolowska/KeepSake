@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import Link from "next/link";
+import { SiteFooter } from "@/components/site-footer";
 import { WizardView } from "@/components/wizard/wizard-view";
 import { requireUser } from "@/lib/actions";
 import { WIZARD_COPY } from "@/lib/wizard/copy";
@@ -24,19 +25,22 @@ export default async function NewTargetPage() {
   const photoOptions = availablePhotos();
 
   return (
-    <main className="flex min-h-dvh flex-col items-center gap-8 bg-white px-6 py-10 text-zinc-900">
-      <div className="flex w-full max-w-2xl flex-col gap-3">
-        <Link
-          href="/dashboard"
-          className="text-base text-zinc-600 underline underline-offset-4 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
-        >
-          {WIZARD_COPY.success.home}
-        </Link>
-        <h1 className="text-3xl font-semibold">{WIZARD_COPY.page.heading}</h1>
-        <p className="text-lg text-zinc-700">{WIZARD_COPY.page.intro}</p>
-      </div>
+    <>
+      <main className="flex min-h-dvh flex-col items-center gap-8 bg-white px-6 py-10 text-zinc-900">
+        <div className="flex w-full max-w-2xl flex-col gap-3">
+          <Link
+            href="/dashboard"
+            className="text-base text-zinc-600 underline underline-offset-4 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+          >
+            {WIZARD_COPY.success.home}
+          </Link>
+          <h1 className="text-3xl font-semibold">{WIZARD_COPY.page.heading}</h1>
+          <p className="text-lg text-zinc-700">{WIZARD_COPY.page.intro}</p>
+        </div>
 
-      <WizardView photoOptions={photoOptions} />
-    </main>
+        <WizardView photoOptions={photoOptions} />
+      </main>
+      <SiteFooter />
+    </>
   );
 }
