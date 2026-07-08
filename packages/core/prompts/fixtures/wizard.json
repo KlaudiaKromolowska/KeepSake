@@ -1,0 +1,17 @@
+{
+  "question": "Who is Sarah?",
+  "answer": "Your daughter",
+  "acceptedVariants": ["My daughter", "His daughter"],
+  "answerFormat": "free_recall",
+  "redFlags": [
+    "This can feel emotional if the answer doesn't come right away — keep the mood light and reassuring."
+  ],
+  "rationale": "Anchoring Sarah's name to 'daughter' gives him a warm, stable connection to hold onto each time she visits.",
+  "selfCritique": {
+    "rejectedDraft": {
+      "question": "Does Sarah visit every Sunday with the kids?",
+      "answer": "Yes, every Sunday with cake"
+    },
+    "reason": "The first version was a yes/no question and the answer had too many shifting details instead of one stable fact."
+  }
+}

@@ -1,0 +1,160 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Mock the AI core: quota + streaming never touch the network or a key.
+const { assertAiQuotaMock, streamTextMock, QuotaErrorClass } = vi.hoisted(() => {
+  class QuotaErrorClass extends Error {}
+  return {
+    assertAiQuotaMock: vi.fn(async () => undefined),
+    streamTextMock: vi.fn(),
+    QuotaErrorClass,
+  };
+});
+vi.mock("@/lib/ai/core", () => ({
+  assertAiQuota: assertAiQuotaMock,
+  streamText: streamTextMock,
+  QuotaError: QuotaErrorClass,
+}));
+
+const { createClientMock } = vi.hoisted(() => ({ createClientMock: vi.fn() }));
+vi.mock("@/lib/supabase/server", () => ({ createClient: createClientMock }));
+
+import { POST } from "./route";
+
+/** Chainable query stub: every filter returns `this`; awaiting or maybeSingle yields `result`. */
+function query(result: { data: unknown; error: unknown }) {
+  const p: Record<string, unknown> = {};
+  for (const m of ["select", "eq", "in", "order", "limit"]) p[m] = () => p;
+  p.maybeSingle = async () => result;
+  p.single = async () => result;
+  // biome-ignore lint/suspicious/noThenProperty: supabase query builders ARE thenables — the stub must be awaitable exactly like the real client.
+  p.then = (resolve: (v: unknown) => unknown) => Promise.resolve(result).then(resolve);
+  return p;
+}
+
+interface FakeOpts {
+  user?: { id: string } | null;
+  patient?: { data: unknown; error: unknown };
+  tables?: Record<string, { data: unknown; error: unknown }>;
+}
+
+function fakeSupabase(opts: FakeOpts) {
+  const patient = opts.patient ?? {
+    data: { id: "p1", display_name: "Marta", etiology: "alzheimers", timezone: "Europe/Warsaw" },
+    error: null,
+  };
+  const defaults: Record<string, { data: unknown; error: unknown }> = {
+    targets: { data: [], error: null },
+    target_state: { data: [], error: null },
+    sessions: { data: [], error: null },
+    trials: { data: [], error: null },
+  };
+  const tables = { ...defaults, ...opts.tables };
+  const from = vi.fn((table: string) =>
+    table === "patients" ? query(patient) : query(tables[table]),
+  );
+  const getUser = vi.fn(async () => ({
+    data: { user: opts.user === undefined ? { id: "u1" } : opts.user },
+    error: null,
+  }));
+  return { from, auth: { getUser } };
+}
+
+function post(body: unknown): Request {
+  return new Request("http://localhost/api/rct-report", {
+    method: "POST",
+    body: typeof body === "string" ? body : JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  assertAiQuotaMock.mockResolvedValue(undefined);
+  streamTextMock.mockReturnValue(
+    new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode("## Summary\nok"));
+        c.close();
+      },
+    }),
+  );
+  createClientMock.mockResolvedValue(fakeSupabase({}));
+});
+afterEach(() => vi.restoreAllMocks());
+
+describe("POST /api/rct-report — input validation", () => {
+  it("400 on invalid JSON body", async () => {
+    const res = await POST(post("not json{"));
+    expect(res.status).toBe(400);
+  });
+
+  it("400 when the question is too short", async () => {
+    const res = await POST(post({ question: "hi" }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toHaveProperty("error");
+  });
+
+  it("400 when the question is too long", async () => {
+    const res = await POST(post({ question: "x".repeat(301) }));
+    expect(res.status).toBe(400);
+  });
+
+  it("400 on unexpected extra keys (strict schema)", async () => {
+    const res = await POST(post({ question: "valid question here", evil: true }));
+    expect(res.status).toBe(400);
+  });
+
+  it("does not call the AI core on invalid input", async () => {
+    await POST(post({ question: "hi" }));
+    expect(assertAiQuotaMock).not.toHaveBeenCalled();
+    expect(streamTextMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/rct-report — auth & quota", () => {
+  it("401 when there is no signed-in user", async () => {
+    createClientMock.mockResolvedValue(fakeSupabase({ user: null }));
+    const res = await POST(post({ question: "What is the acquisition rate?" }));
+    expect(res.status).toBe(401);
+    expect(streamTextMock).not.toHaveBeenCalled();
+  });
+
+  it("429 when the quota is exhausted", async () => {
+    assertAiQuotaMock.mockRejectedValue(new QuotaErrorClass("limit reached"));
+    const res = await POST(post({ question: "What is the acquisition rate?" }));
+    expect(res.status).toBe(429);
+    expect(streamTextMock).not.toHaveBeenCalled();
+  });
+
+  it("404 when the caller has no patient/data", async () => {
+    createClientMock.mockResolvedValue(fakeSupabase({ patient: { data: null, error: null } }));
+    const res = await POST(post({ question: "What is the acquisition rate?" }));
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /api/rct-report — success", () => {
+  it("streams text/plain with nosniff and calls streamText with rct/high", async () => {
+    const res = await POST(post({ question: "What is the acquisition rate?" }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(await res.text()).toContain("## Summary");
+
+    const opts = streamTextMock.mock.calls[0][0];
+    expect(opts.kind).toBe("rct");
+    expect(opts.effort).toBe("high");
+    expect(opts.maxTokens).toBe(8192);
+    // Data minimization: the untrusted question rides in the user message, not the system prompt.
+    expect(opts.user).toContain("What is the acquisition rate?");
+    expect(opts.user).toContain("PATIENT: Marta");
+  });
+
+  it("503 when a data read fails", async () => {
+    createClientMock.mockResolvedValue(
+      fakeSupabase({ tables: { sessions: { data: null, error: { message: "boom" } } } }),
+    );
+    const res = await POST(post({ question: "What is the acquisition rate?" }));
+    expect(res.status).toBe(503);
+  });
+});

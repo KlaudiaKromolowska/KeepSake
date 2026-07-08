@@ -9,7 +9,10 @@
     "exactOptionalPropertyTypes": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@/*": ["../apps/web/src/*"]
+    }
   },
-  "include": ["seed.ts"]
+  "include": ["seed.ts", "env.ts", "wizard-flow.ts", "eval-wizard.ts", "record-fixtures.ts"]
 }

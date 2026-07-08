@@ -2,6 +2,7 @@ import { calendarDayInTz } from "@keepsake/core/sr";
 import { SessionView } from "@/components/session/session-view";
 import { requireUser } from "@/lib/actions";
 import { SESSION_COPY } from "@/lib/session/copy";
+import { personalizedDistractorsAction } from "@/lib/session/distractor-actions";
 
 export const metadata = { title: "Session — Keepsake" };
 
@@ -64,6 +65,21 @@ export default async function SessionPage() {
 
   const demoSpeed = Number(process.env.DEMO_SPEED ?? "1");
 
+  // Fetched once per page load (not per session/trial) so a slow or failing Claude call never
+  // blocks or breaks the kiosk flow — any failure here is swallowed and SessionView falls back to
+  // the static distractor list. Hard 3s budget: the live call took 3–17s in gate testing, and the
+  // kiosk page must never feel broken while a nice-to-have personalization loads.
+  let distractorPrompts: string[] | undefined;
+  try {
+    const timeout = new Promise<{ data: null }>((resolve) =>
+      setTimeout(() => resolve({ data: null }), 3_000),
+    );
+    const { data } = await Promise.race([personalizedDistractorsAction(), timeout]);
+    if (data) distractorPrompts = data;
+  } catch {
+    distractorPrompts = undefined;
+  }
+
   return (
     <main>
       <SessionView
@@ -71,6 +87,7 @@ export default async function SessionPage() {
         demoSpeed={demoSpeed}
         question={target.question}
         resumeAvailable={resumeAvailable}
+        distractorPrompts={distractorPrompts}
       />
     </main>
   );

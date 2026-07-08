@@ -13,6 +13,12 @@ export const DISTRACTOR_PROMPTS: readonly string[] = [
   "Stretch your arms together and take a slow breath.",
 ];
 
-export function distractorForTrial(trialCount: number): string {
-  return DISTRACTOR_PROMPTS[trialCount % DISTRACTOR_PROMPTS.length];
+/**
+ * Picks the wait-time prompt for a given trial. `prompts` is the caregiver's personalized set
+ * (from `personalizedDistractorsAction`) when available; a missing/empty/short set silently falls
+ * back to the static `DISTRACTOR_PROMPTS` list — this feature must never surface as broken.
+ */
+export function distractorForTrial(trialCount: number, prompts?: readonly string[]): string {
+  const list = prompts && prompts.length > 0 ? prompts : DISTRACTOR_PROMPTS;
+  return list[trialCount % list.length];
 }

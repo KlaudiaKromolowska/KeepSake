@@ -1,0 +1,62 @@
+[
+  {
+    "id": 1,
+    "label": "rambling, multi-fact",
+    "description": "So okay where do I even start, um, every Sunday around lunchtime our daughter Sarah comes by with the kids, she usually brings something sweet, a cake or cookies, and honestly I just want him to remember that it's Sarah who visits, not the day or the food, just her name and that she's his daughter, that's the main thing that upsets him when he forgets it.",
+    "etiologyHint": "alzheimers"
+  },
+  {
+    "id": 2,
+    "label": "emotionally loaded",
+    "description": "This is hard to write. My husband of 41 years, Robert, he looked right at me last week and asked who I was. I need something, anything, to help him hold onto my name, Diane, his wife. It broke my heart and I don't want it to happen again.",
+    "etiologyHint": "vascular"
+  },
+  {
+    "id": 3,
+    "label": "too vague",
+    "description": "I just want her to remember more things about her family in general, like everyone, it would help a lot if she could just keep more of it in her head somehow.",
+    "etiologyHint": "unspecified"
+  },
+  {
+    "id": 4,
+    "label": "non-English name",
+    "description": "His grandson's name is Wojciech, we call him Wojtek at home, he visits every other Saturday and always brings his guitar. Grandpa keeps calling him 'the boy' instead of his name, which upsets Wojtek.",
+    "etiologyHint": "lewy"
+  },
+  {
+    "id": 5,
+    "label": "yes/no shaped",
+    "description": "Does she remember that her sister Anne calls her every single Tuesday evening at seven o'clock? I want to know if she can hold onto that fact, that Anne is the one who calls on Tuesdays.",
+    "etiologyHint": "mixed"
+  },
+  {
+    "id": 6,
+    "label": "very short",
+    "description": "Her cat is named Miska.",
+    "etiologyHint": "alzheimers"
+  },
+  {
+    "id": 7,
+    "label": "very long",
+    "description": "We moved into this house on Maple Street back in 1988, right after our son was born, and my mother-in-law helped us paint the kitchen yellow that first summer, and ever since then the whole family has always called it simply 'the yellow house' when talking about visiting for holidays, and I'd love for him to keep remembering our home is called the yellow house, since he lights up whenever anyone mentions it by that name.",
+    "etiologyHint": "parkinsons"
+  },
+  {
+    "id": 8,
+    "label": "distracted, tangential",
+    "description": "The weather's been awful lately, so much rain, and the doctor's office called about rescheduling again which is its own whole story, but anyway, the actual thing I wanted help with is that our neighbor Frank still stops by most mornings to walk with her, and I'd like her to remember that Frank is her walking friend.",
+    "etiologyHint": "vascular"
+  },
+  {
+    "id": 9,
+    "label": "motor/behavioral goal",
+    "description": "Before she stands up from the armchair she's supposed to grab her walker first, but she forgets and just tries to stand on her own, which scares me every time. I want her to remember to use the walker before standing.",
+    "etiologyHint": "parkinsons"
+  },
+  {
+    "id": 10,
+    "label": "multi-fact bundle",
+    "description": "Quick one: our home health aide is named Priya, she comes Monday, Wednesday, and Friday mornings, helps with breakfast and a short walk, and she's very patient. Mainly I just want him to know Priya's name and that she's here to help, not a stranger.",
+    "etiologyHint": "mixed"
+  }
+]

@@ -23,6 +23,7 @@ interface Graph {
   sessionId: string;
   trialId: string;
   auditLogId: number;
+  aiUsageId: string;
 }
 
 interface InsertResult {
@@ -173,6 +174,13 @@ async function seedGraph(email: string, password: string): Promise<Graph> {
     .single();
   if (auditErr || !auditLog) throw new Error(`seed audit_log failed: ${auditErr?.message}`);
 
+  const { data: aiUsage, error: aiUsageErr } = await admin
+    .from("ai_usage")
+    .insert({ caregiver_id: userId, kind: "wizard" })
+    .select("id")
+    .single();
+  if (aiUsageErr || !aiUsage) throw new Error(`seed ai_usage failed: ${aiUsageErr?.message}`);
+
   return {
     userId,
     email,
@@ -182,6 +190,7 @@ async function seedGraph(email: string, password: string): Promise<Graph> {
     sessionId: session.id,
     trialId: trial.id,
     auditLogId: auditLog.id,
+    aiUsageId: aiUsage.id,
   };
 }
 
@@ -470,6 +479,27 @@ const tableSpecs: TableSpec[] = [
     anonInsertPayload: (g) => ({ caregiver_id: g.userId, action: "data_access", detail: {} }),
     updatePatch: { detail: { changed: true } },
   },
+  {
+    // ai_usage: insert + select own only (immutable ledger — no update/delete policy).
+    table: "ai_usage",
+    pk: "id",
+    ownRowId: (g) => g.aiUsageId,
+    readableByOwner: true,
+    ownerCanMutate: false,
+    insertOwn: async (client, g) =>
+      await client
+        .from("ai_usage")
+        .insert({ caregiver_id: g.userId, kind: "vision" })
+        .select("id")
+        .single(),
+    insertCross: async (client, _attacker, victim) => {
+      const marker = { caregiver_id: victim.userId, kind: "debrief" };
+      const { error } = await client.from("ai_usage").insert(marker);
+      return { error, marker };
+    },
+    anonInsertPayload: (g) => ({ caregiver_id: g.userId, kind: "wizard" }),
+    updatePatch: { kind: "rct" },
+  },
 ];
 
 describe.each(tableSpecs)("RLS: $table", (spec) => {
@@ -609,5 +639,24 @@ describe("re-parenting attacks", () => {
       .eq("id", graphA.targetId)
       .single();
     expect(check.data?.patient_id).toBe(graphA.patientId);
+  });
+});
+
+describe("ai_calls_today() global counter", () => {
+  it("returns the same global count for any caller, spanning all tenants", async () => {
+    // Each graph seeded one ai_usage row (in the last day); the SECURITY DEFINER function counts
+    // across tenants, bypassing the per-row SELECT policy — so both callers see the same total,
+    // and it includes rows they cannot themselves SELECT.
+    const fromA = await clientA.rpc("ai_calls_today");
+    const fromB = await clientB.rpc("ai_calls_today");
+    expect(fromA.error).toBeNull();
+    expect(fromB.error).toBeNull();
+    expect(Number(fromA.data)).toBeGreaterThanOrEqual(2);
+    expect(fromA.data).toEqual(fromB.data);
+
+    // Sanity: B genuinely cannot read A's ai_usage rows directly (the count above is only
+    // reachable via the definer function, not via a normal SELECT).
+    const bSeesA = await clientB.from("ai_usage").select("id").eq("id", graphA.aiUsageId);
+    expect(bSeesA.data ?? []).toHaveLength(0);
   });
 });

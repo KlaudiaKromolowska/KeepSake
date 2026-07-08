@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/actions";
 import { signOut } from "@/lib/auth/actions";
+import { REVIEW_COPY } from "@/lib/review/copy";
 import { SESSION_COPY } from "@/lib/session/copy";
+import { WIZARD_COPY } from "@/lib/wizard/copy";
 
 export const metadata = { title: "Dashboard — Keepsake" };
 
@@ -32,6 +34,22 @@ export default async function DashboardPage() {
       ) : (
         <p className="text-xl text-zinc-700">{SESSION_COPY.dashboard.noTarget}</p>
       )}
+
+      <Link
+        href="/targets/new"
+        className="flex min-h-[64px] w-full max-w-xl flex-col items-center gap-2 rounded-2xl border-2 border-zinc-900 bg-white px-8 py-6 text-center text-zinc-900 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+      >
+        <span className="text-2xl font-semibold">{WIZARD_COPY.page.heading}</span>
+        <span className="text-lg text-zinc-600">{WIZARD_COPY.page.cardHint}</span>
+      </Link>
+
+      <Link
+        href="/review"
+        className="flex min-h-[64px] w-full max-w-xl flex-col items-center gap-2 rounded-2xl border-2 border-zinc-900 bg-white px-8 py-6 text-center text-zinc-900 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+      >
+        <span className="text-2xl font-semibold">{REVIEW_COPY.title}</span>
+        <span className="text-lg text-zinc-600">{REVIEW_COPY.intro}</span>
+      </Link>
 
       <form action={signOut}>
         <button

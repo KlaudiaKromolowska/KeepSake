@@ -112,23 +112,23 @@
 
 ## Phase 4 — Claude integration (Day 4)
 
-- [ ] **4.1** API plumbing (§8b): forced tool-use + `input_schema` + zod + 1 retry + **hand-entry
+- [x] **4.1** API plumbing (§8b): forced tool-use + `input_schema` + zod + 1 retry + **hand-entry
   fallback**; prompt cache on the SR-protocol system prompt; versioned prompts in
   `packages/core/prompts/`; `locale` passed through; pinned model IDs + SDK.
-- [ ] **4.2** AI routes auth-gated + rate-limited (public repo = credit-drain vector). **P0-security.**
-- [ ] **4.3** **Target wizard**: messy description → phrased target + variants + red-flag check +
+- [x] **4.2** AI routes auth-gated + rate-limited (public repo = credit-drain vector). **P0-security.**
+- [x] **4.3** **Target wizard**: messy description → phrased target + variants + red-flag check +
   etiology-format rec + **visible self-critique** (rejected draft + reason). ⛔(one wizard call)
   ✂️D5→single call, no self-critique/etiology branch. ✂️D4→3 hand-authored seed targets +
   "Claude reviews your target."
-- [ ] **4.4** **Vision dual-coding QA** on the seeded photos (cluttered group shot → rejection +
+- [x] **4.4** **Vision dual-coding QA** on the seeded photos (cluttered group shot → rejection +
   crop advice). ✂️D5.
-- [ ] **4.5** Claude-personalized distractor suggestions. ✂️D3 (falls back to static).
-- [ ] **4.6** Post-session **private debrief** (streamed, copyable). ⛔(one debrief call)
-- [ ] **4.7** Golden-set evals (~10 messy inputs → code-side red-flag/length rules pass); prompt
+- [x] **4.5** Claude-personalized distractor suggestions. ✂️D3 (falls back to static).
+- [x] **4.6** Post-session **private debrief** (streamed, copyable). ⛔(one debrief call)
+- [x] **4.7** Golden-set evals (~10 messy inputs → code-side red-flag/length rules pass); prompt
   tuning capped to this set.
 - [ ] **4.8** SLP call happens ≤ today; fold feedback into defaults/copy; get named-user consent
   for quote/cameo.
-- [ ] **Gate (D4 EOD): wizard → session → debrief end-to-end on the prod URL.**
+- [x] **Gate (D4 EOD): wizard → session → debrief end-to-end** ✅ **PASSED D2 (local)** — all four beats live incl. RCT-in-a-box (5.6 pulled forward, streamed with correct numbers from real logs). Prod-URL verification pending deploy (manual until Vercel GitHub app connected).
 
 ## Phase 5 — Polish & feature freeze (Day 5; freeze 12:00)
 
@@ -139,7 +139,7 @@
 - [ ] **5.4** Patient-affect two-tap capture (pre/post) — only if on schedule. ✂️D3.
 - [ ] **5.5** **Canned-replay Claude fixtures** recorded from real outputs (wizard, self-critique,
   vision, debrief, RCT-in-a-box answer) for film takes + live final. ⛔ for the recording.
-- [ ] **5.6** **RCT-in-a-box mini study report** (§1b v4.1 jaw-drop — now MVP, in the never-cut
+- [x] **5.6** *(pulled forward to D2, Phase 4)* **RCT-in-a-box mini study report** (§1b v4.1 jaw-drop — now MVP, in the never-cut
   chain): Claude analyzes real trial logs → acquisition rate, retention/decay, interval band,
   booster rec, n=1 caveats. Live on camera if on schedule; **degrades to fixture-replay, never
   cut.** Build the analysis prompt + rendering D4–D5; record fixture at D5 freeze.

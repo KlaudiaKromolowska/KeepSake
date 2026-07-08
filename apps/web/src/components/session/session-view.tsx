@@ -36,11 +36,13 @@ export function SessionView({
   demoSpeed,
   question,
   resumeAvailable,
+  distractorPrompts,
 }: {
   targetId: string;
   demoSpeed: number;
   question: string;
   resumeAvailable: boolean;
+  distractorPrompts?: readonly string[];
 }) {
   const [result, setResult] = useState<StartSessionResult | null>(null);
   const [starting, setStarting] = useState(false);
@@ -63,7 +65,10 @@ export function SessionView({
     }
   }
 
-  if (result) return <RunningSession result={result} demoSpeed={demoSpeed} />;
+  if (result)
+    return (
+      <RunningSession result={result} demoSpeed={demoSpeed} distractorPrompts={distractorPrompts} />
+    );
 
   return (
     <section className={KIOSK_SECTION}>
@@ -89,7 +94,15 @@ export function SessionView({
   );
 }
 
-function RunningSession({ result, demoSpeed }: { result: StartSessionResult; demoSpeed: number }) {
+function RunningSession({
+  result,
+  demoSpeed,
+  distractorPrompts,
+}: {
+  result: StartSessionResult;
+  demoSpeed: number;
+  distractorPrompts?: readonly string[];
+}) {
   const router = useRouter();
   const { sessionId, target, config } = result;
   const targetId = target.id;
@@ -210,7 +223,7 @@ function RunningSession({ result, demoSpeed }: { result: StartSessionResult; dem
       )}
       {state.phase === "distractor" && currentWait && (
         <DistractorCard
-          prompt={distractorForTrial(state.trials.length)}
+          prompt={distractorForTrial(state.trials.length, distractorPrompts)}
           wait={currentWait}
           rungOptions={ladderRungs(config)}
           onOverride={(sec) => runner.overrideInterval(sec)}
@@ -227,6 +240,7 @@ function RunningSession({ result, demoSpeed }: { result: StartSessionResult; dem
       )}
       {state.phase === "ended" && (
         <EndScreen
+          sessionId={sessionId}
           recalls={recallCount(state.trials)}
           trials={state.trials.length}
           mastered={state.progress.mastered}

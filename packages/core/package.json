@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./sr": "./src/sr/index.ts"
+    "./sr": "./src/sr/index.ts",
+    "./prompts/*": "./prompts/*.ts"
   },
   "scripts": {
     "test": "vitest run",

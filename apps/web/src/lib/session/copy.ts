@@ -52,6 +52,14 @@ export const SESSION_COPY = {
     answerCardPrompt: "What does the card say?",
     answerCardSave: "Log the card",
   },
+  debrief: {
+    open: "A private note for you",
+    heading: "A private note for you",
+    loading: "Writing your note…",
+    copy: "Copy note",
+    copied: "Copied",
+    error: "Couldn't load your note just now.",
+  },
   preSession: {
     heading: "Ready when you are",
     prompt: "When you're both settled, tap to begin. There's no rush.",

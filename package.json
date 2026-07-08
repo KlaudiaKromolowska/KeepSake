@@ -14,7 +14,9 @@
     "typecheck": "pnpm -r exec tsc --noEmit && tsc --noEmit -p scripts/tsconfig.json",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "seed": "tsx scripts/seed.ts"
+    "seed": "tsx scripts/seed.ts",
+    "eval:wizard": "tsx --tsconfig apps/web/tsconfig.json scripts/eval-wizard.ts",
+    "fixtures:record": "tsx --tsconfig apps/web/tsconfig.json scripts/record-fixtures.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.0",
@@ -23,6 +25,7 @@
     "@types/node": "^24",
     "lefthook": "^2.0.0",
     "tsx": "^4.23.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "zod": "4.4.3"
   }
 }
