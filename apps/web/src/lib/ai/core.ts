@@ -13,7 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { z } from "zod";
 import type { Database } from "@/lib/supabase/database.types";
 
-export type AiKind = "wizard" | "vision" | "debrief" | "distractors" | "rct";
+export type AiKind = "wizard" | "vision" | "debrief" | "distractors" | "rct" | "grade";
 
 /** Per-user rolling-hour and global rolling-day caps. Public repo + demo login = credit-drain risk. */
 export const AI_USER_HOURLY_LIMIT = 20;

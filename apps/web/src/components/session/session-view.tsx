@@ -37,12 +37,15 @@ export function SessionView({
   question,
   resumeAvailable,
   distractorPrompts,
+  speechEnabled = false,
 }: {
   targetId: string;
   demoSpeed: number;
   question: string;
   resumeAvailable: boolean;
   distractorPrompts?: readonly string[];
+  /** NEXT_PUBLIC_SPEECH=1 — V1 speech assist on the probe screen (suggestion only, default off). */
+  speechEnabled?: boolean;
 }) {
   const [result, setResult] = useState<StartSessionResult | null>(null);
   const [starting, setStarting] = useState(false);
@@ -67,7 +70,12 @@ export function SessionView({
 
   if (result)
     return (
-      <RunningSession result={result} demoSpeed={demoSpeed} distractorPrompts={distractorPrompts} />
+      <RunningSession
+        result={result}
+        demoSpeed={demoSpeed}
+        distractorPrompts={distractorPrompts}
+        speechEnabled={speechEnabled}
+      />
     );
 
   return (
@@ -98,10 +106,12 @@ function RunningSession({
   result,
   demoSpeed,
   distractorPrompts,
+  speechEnabled,
 }: {
   result: StartSessionResult;
   demoSpeed: number;
   distractorPrompts?: readonly string[];
+  speechEnabled: boolean;
 }) {
   const router = useRouter();
   const { sessionId, target, config } = result;
@@ -210,7 +220,13 @@ function RunningSession({
         />
       )}
       {state.phase === "awaiting_probe" && (
-        <ProbeScreen question={q} answer={a} imageUrl={img} onOutcome={(o) => runner.probe(o)} />
+        <ProbeScreen
+          question={q}
+          answer={a}
+          imageUrl={img}
+          onOutcome={(o) => runner.probe(o)}
+          {...(speechEnabled ? { speech: { targetId, aliases: target.acceptedVariants } } : {})}
+        />
       )}
       {state.phase === "correcting" && (
         <AnswerScreen

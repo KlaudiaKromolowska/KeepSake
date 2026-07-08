@@ -12,6 +12,13 @@ export const SESSION_COPY = {
     miss: "Not this time",
     unclear: "Couldn't tell",
   },
+  speech: {
+    listening: "Listening…",
+    checking: "Checking what we heard…",
+    heardRecall: "It sounded like they remembered — tap to confirm.",
+    heardMiss: "That didn't sound quite like the answer — you know best.",
+    suggested: "Suggested",
+  },
   teach: {
     heading: "Let's learn this together",
     instruction: "Read the answer out loud together.",
