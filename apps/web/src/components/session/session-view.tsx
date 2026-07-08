@@ -4,6 +4,7 @@ import type { SessionEvent, SessionState } from "@keepsake/core/sr";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ActionResult } from "@/lib/actions";
+import { useNarration } from "@/lib/audio/use-narration";
 import {
   annotateSessionAction,
   endSessionAction,
@@ -20,6 +21,7 @@ import { ladderRungs } from "@/lib/session/wait-policy";
 import { AnswerScreen } from "./answer-screen";
 import { DistractorCard } from "./distractor-card";
 import { EndScreen } from "./end-screen";
+import { NarrationToggle } from "./narration-toggle";
 import { ProbeScreen } from "./probe-screen";
 
 const KIOSK_SECTION =
@@ -37,12 +39,14 @@ export function SessionView({
   question,
   resumeAvailable,
   distractorPrompts,
+  demoAudio,
 }: {
   targetId: string;
   demoSpeed: number;
   question: string;
   resumeAvailable: boolean;
   distractorPrompts?: readonly string[];
+  demoAudio?: boolean;
 }) {
   const [result, setResult] = useState<StartSessionResult | null>(null);
   const [starting, setStarting] = useState(false);
@@ -67,7 +71,12 @@ export function SessionView({
 
   if (result)
     return (
-      <RunningSession result={result} demoSpeed={demoSpeed} distractorPrompts={distractorPrompts} />
+      <RunningSession
+        result={result}
+        demoSpeed={demoSpeed}
+        distractorPrompts={distractorPrompts}
+        demoAudio={demoAudio ?? false}
+      />
     );
 
   return (
@@ -98,10 +107,12 @@ function RunningSession({
   result,
   demoSpeed,
   distractorPrompts,
+  demoAudio,
 }: {
   result: StartSessionResult;
   demoSpeed: number;
   distractorPrompts?: readonly string[];
+  demoAudio: boolean;
 }) {
   const router = useRouter();
   const { sessionId, target, config } = result;
@@ -165,6 +176,11 @@ function RunningSession({
   );
 
   const handle = useSessionRunner(result.state, config, demoSpeed, onChange);
+  const narration = useNarration(
+    handle?.state ?? null,
+    { question: target.question, answer: target.answer },
+    demoAudio,
+  );
 
   const screenRef = useRef<HTMLDivElement>(null);
   const phase = handle?.state.phase;
@@ -184,6 +200,7 @@ function RunningSession({
 
   return (
     <div ref={screenRef}>
+      <NarrationToggle muted={narration.muted} onToggle={narration.toggleMuted} />
       {pendingSaves > 0 && (
         <div
           role="alert"
