@@ -47,7 +47,15 @@ type PartialEvent =
   | { type: "teach_done" }
   | { type: "correction_done" }
   | { type: "end_requested" }
-  | { type: "probe_result"; outcome: Outcome };
+  | { type: "probe_result"; outcome: Outcome }
+  | { type: "interval_override"; intervalSec: number };
+
+// Deliberately includes out-of-range (negative, huge) and float values — the reducer must clamp
+// and round them, and the invariants below must hold regardless of what a practitioner types in.
+const intervalOverrideValueArb = fc.oneof(
+  fc.double({ min: -1000, max: 2000, noNaN: true }),
+  fc.integer({ min: -1000, max: 2000 }),
+);
 
 const partialEventArb: fc.Arbitrary<PartialEvent> = fc.oneof(
   { weight: 3, arbitrary: fc.constant<PartialEvent>({ type: "wait_elapsed" }) },
@@ -60,6 +68,13 @@ const partialEventArb: fc.Arbitrary<PartialEvent> = fc.oneof(
   { weight: 2, arbitrary: fc.constant<PartialEvent>({ type: "teach_done" }) },
   { weight: 2, arbitrary: fc.constant<PartialEvent>({ type: "correction_done" }) },
   { weight: 1, arbitrary: fc.constant<PartialEvent>({ type: "end_requested" }) },
+  {
+    weight: 2,
+    arbitrary: intervalOverrideValueArb.map<PartialEvent>((intervalSec) => ({
+      type: "interval_override",
+      intervalSec,
+    })),
+  },
 );
 
 /** A sequence of events with monotonically non-decreasing `at` timestamps. */
@@ -76,6 +91,9 @@ const seqArb: fc.Arbitrary<SessionEvent[]> = fc
     return pairs.map(([pe, delta]): SessionEvent => {
       at += delta;
       if (pe.type === "probe_result") return { type: "probe_result", outcome: pe.outcome, at };
+      if (pe.type === "interval_override") {
+        return { type: "interval_override", intervalSec: pe.intervalSec, at };
+      }
       return { type: pe.type, at };
     });
   });
@@ -267,10 +285,15 @@ describe("SR engine invariants (property-based, seed=42)", () => {
       let strayNoOpHits = 0;
       fc.assert(
         fc.property(progressArb(config), seqArb, (progress, events) => {
-          for (const { prev, next } of trace(progress, events, config)) {
+          for (const { prev, event, next } of trace(progress, events, config)) {
             const from: SessionPhase = prev.phase;
             const to: SessionPhase = next.phase;
             if (from === to) {
+              // interval_override in distractor is the one legitimate same-phase mutation (it
+              // moves the current rung without changing phase) — exempt from the no-op rule.
+              // Every other same-phase result (including interval_override elsewhere) must be a
+              // genuine identity no-op.
+              if (event.type === "interval_override" && from === "distractor") continue;
               strayNoOpHits += 1;
               expect(next).toBe(prev); // same-phase ⟹ genuine no-op (identical object)
             } else {

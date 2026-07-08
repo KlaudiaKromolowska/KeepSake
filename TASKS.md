@@ -33,7 +33,9 @@
 - [x] **0.4** Repo hygiene: MIT LICENSE ✓, README stub ✓, `docs/demo-video.md` v0 ✓ (script
   §16.4), CI workflow (biome + tsc + vitest + build) ✓ — badge once CI has run on main.
 - [ ] **0.5** Hackathon admin (external, time-sensitive — do not defer):
-  - [ ] SLP outreach sent (call ≤ D4, drop-dead D5; fallback = card + quote)
+  - [x] SLP outreach sent → **practitioner response received D2** (Centrum Montessori Senior —
+    detailed feedback folded into Phase 3, see `docs/expert-feedback-2026-07-08.md`; consent
+    ask for naming/quote drafted, ⚠️ human: send reply)
   - [ ] "New Work Only" scaffolding question in #questions
   - [ ] Submission-portal mechanics + AI-disclosure rules confirmed
   - [x] ~~Demo domain~~ → free `keepsake-nu.vercel.app` (no-spend rule) · ~~manual order~~ →
@@ -90,18 +92,23 @@
 
 ## Phase 3 — Session kiosk UI (Day 3) ⛔
 
-- [ ] **3.1** Kiosk shell with a11y baseline baked in (≥20–24px type, 60px targets, 7:1 contrast,
+- [x] **3.1** Kiosk shell with a11y baseline baked in (≥20–24px type, 60px targets, 7:1 contrast,
   reduced-motion, no UI timeouts, no color-only signals — §8b).
-- [ ] **3.2** Probe screen + **three-state caregiver tap** (recall / miss / unclear).
-- [ ] **3.3** **Device-delivered errorless-correction screen** (answer on screen → patient repeats). ⛔
-- [ ] **3.4** Distractor card (static prompts now; Claude-personalized in 4.4) + **visible interval
+- [x] **3.2** Probe screen + **three-state caregiver tap** (recall / miss / unclear).
+- [x] **3.3** **Device-delivered errorless-correction screen** (answer on screen → patient repeats). ⛔
+- [x] **3.4** Distractor card (static prompts now; Claude-personalized in 4.4) + **visible interval
   clock** + end-on-win flow.
-- [ ] **3.5** Session persist/resume (trials = source of truth; same-day resume at last-success
-  rung, else graceful discard).
-- [ ] **3.6** Wire trials → Supabase; `DEMO_SPEED` compression profile (first 15s real,
-  accelerate >60s — §1b).
-- [ ] **Gate (D3 EOD): full scripted session runs in the browser at demo speed.** Miss → cut
-  line 2 (affect capture out; browser-default TTS; static distractors).
+- [x] **3.5** Session persist/resume (trials = source of truth; same-day resume at last-success
+  rung, else graceful discard). ✅ Resume verified live against a genuinely crashed session.
+- [x] **3.6** Wire trials → Supabase; `DEMO_SPEED` compression profile (first 15s real,
+  accelerate >60s — §1b). DB-verified: real `interval_sec` at 60× compression.
+- [x] **3.7** Practitioner-feedback fold-in (D2 email — `docs/expert-feedback-2026-07-08.md`):
+  caregiver answer hint on probe · no rigid scheduling copy (mastery celebrated, never
+  scheduled) · **`interval_override` engine event + "Adjust wait" control** (overrides logged
+  as annotations) · session note field · "answer card introduced" annotation.
+- [x] **Gate (D3 EOD): full scripted session runs in the browser at demo speed.** ✅ **PASSED D2**
+  (a day early): full arc incl. deliberate miss → device correction → override → recovery →
+  end-on-win; scheduler handoff verified in DB (gap 1→1.5d on start-probe recall).
 
 ## Phase 4 — Claude integration (Day 4)
 
