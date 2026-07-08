@@ -100,7 +100,9 @@ export function DistractorCard({
                     type="button"
                     aria-pressed={isCurrent}
                     onClick={() => {
-                      onOverride(sec);
+                      // Tapping the current rung would restart the wait and log a from===to
+                      // annotation — treat it as "keep as is" and just close the panel.
+                      if (!isCurrent) onOverride(sec);
                       setAdjustOpen(false);
                     }}
                     className={`min-h-[64px] rounded-2xl border-2 px-6 text-2xl font-medium focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 ${

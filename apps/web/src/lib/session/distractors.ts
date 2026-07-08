@@ -7,7 +7,7 @@ export const DISTRACTOR_PROMPTS: readonly string[] = [
   "Look out the window together — what's the weather doing?",
   "Ask about a favourite song and hum a little of it.",
   "Talk about a nice smell — coffee, fresh bread, flowers.",
-  "Ask what they did for fun as a child.",
+  "Talk about a game or pastime you both enjoy.",
   "Point out something colourful nearby and name the colour.",
   "Ask who they'd like to call for a chat this week.",
   "Stretch your arms together and take a slow breath.",

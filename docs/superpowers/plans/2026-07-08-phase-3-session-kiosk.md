@@ -632,6 +632,18 @@ export function EndScreen(props: { recalls: number; trials: number; mastered: bo
 
 ---
 
+## Post-review rulings (whole-branch review, 2026-07-08)
+
+- **Override annotations are best-effort by design.** The `interval_override` annotation is
+  fired un-queued (a retry could duplicate it); if it's lost to a network blip, the deviation
+  remains reconstructable from the persisted trial `intervalSec` sequence — the analytic signal
+  is never fully silent. Ruled acceptable for MVP; revisit only if annotation loss shows up in
+  practice.
+- **Client-snapshot trust boundary (V1 backlog).** `target_state`/`targets.status` writes derive
+  from the client-computed engine snapshot (zod-validated for shape, not semantic legitimacy);
+  blast radius is RLS-bounded to the caregiver's own patient. V1 hardening: server-side event
+  replay so progress is derived from trials, not trusted state.
+
 ## Out of scope (do not build)
 
 - TTS/audio playback (Web Speech or pre-gen) — Phase 5/6; the correction is read off the screen.
