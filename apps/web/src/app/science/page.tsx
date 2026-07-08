@@ -258,6 +258,9 @@ export default function SciencePage() {
 
             <div className="w-full overflow-x-auto rounded-2xl border border-zinc-200">
               <table className="w-full min-w-[640px] border-collapse text-left text-base">
+                <caption className="sr-only">
+                  Which Claude model powers each Keepsake feature, and where in the code it runs.
+                </caption>
                 <thead>
                   <tr className="border-b border-zinc-200 bg-zinc-50">
                     <th scope="col" className="px-4 py-3 font-semibold text-zinc-700">
