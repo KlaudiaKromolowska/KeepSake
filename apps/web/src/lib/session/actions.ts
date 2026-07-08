@@ -15,6 +15,7 @@ import {
 import type { ActionResult } from "@/lib/actions";
 import { failAction, requireUser } from "@/lib/actions";
 import type { Json, Tables, TablesInsert } from "@/lib/supabase/database.types";
+import { PRACTICABLE_STATUSES } from "@/lib/targets/queue";
 import { aliasesFromJson } from "./grade-schema";
 import {
   annotateSessionInputSchema,
@@ -94,7 +95,10 @@ export async function startSessionAction(
   if (targetErr || !target) {
     return failAction("startSession: target lookup", targetErr, "Target not found.");
   }
-  if (target.status !== "active" && target.status !== "maintenance") {
+  // Practicable = acquiring ("active") OR in the post-mastery booster loop ("mastered"/
+  // "maintenance"). A mastered target must be startable so its boosters can run in parallel (V2
+  // multi-target); only "draft"/"paused"/"retired" are turned away here.
+  if (!(PRACTICABLE_STATUSES as readonly string[]).includes(target.status)) {
     return { data: null, error: "This target is not ready to practice." };
   }
 

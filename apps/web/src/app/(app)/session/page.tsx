@@ -3,6 +3,8 @@ import { SessionView } from "@/components/session/session-view";
 import { requireUser } from "@/lib/actions";
 import { SESSION_COPY } from "@/lib/session/copy";
 import { personalizedDistractorsAction } from "@/lib/session/distractor-actions";
+import { loadQueue } from "@/lib/targets/load";
+import { selectSessionTarget } from "@/lib/targets/queue";
 
 export const metadata = { title: "Session — Keepsake" };
 
@@ -10,22 +12,21 @@ const NO_TARGET_SECTION =
   "flex min-h-dvh flex-col items-center justify-center gap-8 bg-white px-6 text-center text-zinc-900";
 
 /**
- * Kiosk session entry. Loads the caregiver's single active/maintenance target and, read-only,
- * checks for an open same-day session (to choose begin vs. resume copy). No session row is created
- * here — that happens only when the caregiver taps begin inside <SessionView>.
+ * Kiosk session entry. Resolves WHICH of the patient's targets to practise (V2 multi-target: the
+ * due target, acquisition winning ties — `selectSessionTarget`) and, read-only, checks for an open
+ * same-day session (to choose begin vs. resume copy). No session row is created here — that happens
+ * only when the caregiver taps begin inside <SessionView>. The kiosk trial UI itself is unchanged;
+ * only the target it opens on is now queue-aware.
  */
 export default async function SessionPage() {
   const { supabase } = await requireUser();
 
-  const { data: target } = await supabase
-    .from("targets")
-    .select("id, question, patient_id")
-    .in("status", ["active", "maintenance"])
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const now = Date.now();
+  const queue = await loadQueue(supabase);
+  const selectedId = queue ? selectSessionTarget(queue.targets, now, queue.patient.timezone) : null;
+  const target = queue?.targets.find((t) => t.id === selectedId) ?? null;
 
-  if (!target) {
+  if (!target || !queue) {
     return (
       <main className={NO_TARGET_SECTION}>
         <h1 tabIndex={-1} className="text-3xl font-semibold">
@@ -35,20 +36,14 @@ export default async function SessionPage() {
     );
   }
 
-  const now = Date.now();
+  const patient = queue.patient;
   let resumeAvailable = false;
 
-  const { data: patient } = await supabase
-    .from("patients")
-    .select("timezone")
-    .eq("id", target.patient_id)
-    .single();
-
-  if (patient) {
+  {
     const { data: open } = await supabase
       .from("sessions")
       .select("started_at, summary")
-      .eq("patient_id", target.patient_id)
+      .eq("patient_id", patient.id)
       .is("ended_at", null)
       .order("started_at", { ascending: false })
       .limit(1)
@@ -76,7 +71,7 @@ export default async function SessionPage() {
     const timeout = new Promise<{ data: null }>((resolve) =>
       setTimeout(() => resolve({ data: null }), 3_000),
     );
-    const { data } = await Promise.race([personalizedDistractorsAction(), timeout]);
+    const { data } = await Promise.race([personalizedDistractorsAction(target.id), timeout]);
     if (data) distractorPrompts = data;
   } catch {
     distractorPrompts = undefined;

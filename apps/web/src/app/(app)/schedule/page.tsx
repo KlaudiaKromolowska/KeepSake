@@ -9,14 +9,34 @@ import {
   type SchedulePlan,
   schedulePlan,
 } from "@/lib/schedule/plan";
+import { TARGETS_COPY } from "@/lib/targets/copy";
+import { classifyTargets, PRACTICABLE_STATUSES, type QueueTarget } from "@/lib/targets/queue";
 
 export const metadata = { title: "The plan — Keepsake" };
 
+const PHASE_ORDER = { acquiring: 0, due: 1, queued: 2, maintenance: 3 } as const;
+
+/** Embedded 1:1 target_state — every field schedulePlan + classifyTargets need, in one query. */
+interface TargetPlanRow {
+  id: string;
+  question: string;
+  status: string;
+  created_at: string;
+  target_state: {
+    schedule_mode: string | null;
+    next_due_at: string | null;
+    mastered_at: string | null;
+    start_streak: number | null;
+    booster_step: number | null;
+  } | null;
+}
+
 /**
  * Caregiver-facing schedule surface (/schedule): the between-session engine made visible — journey
- * stage, next practice window, mastery progress, and the booster rhythm. Everything is DERIVED from
- * the persisted target_state row (nothing new stored). Server component; every read runs on the RLS
- * user client (own patient only). Light theme forced (bg-white) to match sibling caregiver pages.
+ * stage, next practice window, mastery progress, and the booster rhythm, now for EVERY target
+ * (V2 multi-target), the acquisition memory first. Everything is DERIVED from the persisted
+ * target_state rows (nothing new stored). Server component; every read runs on the RLS user client
+ * (own patient only). Light theme forced (bg-white) to match sibling caregiver pages.
  */
 export default async function SchedulePage() {
   const { supabase } = await requireUser();
@@ -30,45 +50,101 @@ export default async function SchedulePage() {
   if (patientErr) return <Shell body={C.unavailable} />;
   if (!patient) return <Shell body={C.noTarget} />;
 
-  const { data: target, error: targetErr } = await supabase
+  const { data, error: targetsErr } = await supabase
     .from("targets")
-    .select("id, question")
+    .select(
+      "id, question, status, created_at, target_state(schedule_mode, next_due_at, mastered_at, start_streak, booster_step)",
+    )
     .eq("patient_id", patient.id)
-    .in("status", ["active", "maintenance"])
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (targetErr) return <Shell body={C.unavailable} />;
-  if (!target) return <Shell body={C.noTarget} />;
+    .in("status", [...PRACTICABLE_STATUSES])
+    .order("created_at", { ascending: true });
+  if (targetsErr) return <Shell body={C.unavailable} />;
 
-  const { data: state, error: stateErr } = await supabase
-    .from("target_state")
-    .select("schedule_mode, next_due_at, mastered_at, start_streak, booster_step")
-    .eq("target_id", target.id)
-    .maybeSingle();
-  if (stateErr) return <Shell heading={target.question} body={C.unavailable} />;
+  const rows = (data ?? []) as unknown as TargetPlanRow[];
+  if (rows.length === 0) return <Shell body={C.noTarget} />;
 
+  const now = Date.now();
   const { config } = defaultsForEtiology(patient.etiology);
-  const plan = schedulePlan(
-    {
-      scheduleMode: state?.schedule_mode ?? null,
-      nextDueAt: state?.next_due_at ?? null,
-      masteredAt: state?.mastered_at ?? null,
-      startStreak: state?.start_streak ?? 0,
-      boosterStep: state?.booster_step ?? null,
-    },
-    config,
-    Date.now(),
-    patient.timezone,
+
+  const queueTargets: QueueTarget[] = rows.map((r) => ({
+    id: r.id,
+    question: r.question,
+    status: r.status,
+    createdAt: r.created_at,
+    scheduleMode: r.target_state?.schedule_mode ?? null,
+    nextDueAt: r.target_state?.next_due_at ?? null,
+    masteredAt: r.target_state?.mastered_at ?? null,
+  }));
+  const phaseById = new Map(
+    classifyTargets(queueTargets, now, patient.timezone).map((c) => [c.target.id, c.phase]),
+  );
+  const rowById = new Map(rows.map((r) => [r.id, r]));
+
+  const ordered = [...queueTargets].sort(
+    (a, b) =>
+      PHASE_ORDER[phaseById.get(a.id) ?? "maintenance"] -
+        PHASE_ORDER[phaseById.get(b.id) ?? "maintenance"] || a.createdAt.localeCompare(b.createdAt),
   );
 
   return (
-    <Shell heading={target.question}>
+    <Shell>
+      {ordered.map((qt) => {
+        const st = rowById.get(qt.id)?.target_state;
+        const plan = schedulePlan(
+          {
+            scheduleMode: qt.scheduleMode,
+            nextDueAt: qt.nextDueAt,
+            masteredAt: qt.masteredAt,
+            startStreak: st?.start_streak ?? 0,
+            boosterStep: st?.booster_step ?? null,
+          },
+          config,
+          now,
+          patient.timezone,
+        );
+        return (
+          <TargetPlan
+            key={qt.id}
+            question={qt.question}
+            phaseLabel={TARGETS_COPY.phase[phaseById.get(qt.id) ?? "maintenance"].label}
+            plan={plan}
+            multi={ordered.length > 1}
+          />
+        );
+      })}
+    </Shell>
+  );
+}
+
+/** One target's plan, headed by its question + phase badge when there is more than one target. */
+function TargetPlan({
+  question,
+  phaseLabel,
+  plan,
+  multi,
+}: {
+  question: string;
+  phaseLabel: string;
+  plan: SchedulePlan;
+  multi: boolean;
+}) {
+  return (
+    <section
+      className={`flex w-full flex-col gap-8 ${multi ? "rounded-2xl border border-zinc-200 p-5" : ""}`}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h2 className="text-2xl font-semibold text-zinc-900">{question}</h2>
+        {multi && (
+          <span className="rounded-full bg-zinc-200 px-3 py-0.5 text-sm font-semibold text-zinc-700">
+            {phaseLabel}
+          </span>
+        )}
+      </div>
       <Journey steps={plan.steps} />
       <NextPractice window={plan.window} />
       <Mastery mastery={plan.mastery} />
       <Booster steps={plan.booster} mastered={plan.mastered} />
-    </Shell>
+    </section>
   );
 }
 
@@ -191,21 +267,12 @@ function Booster({ steps, mastered }: { steps: BoosterStep[]; mastered: boolean 
 }
 
 /** Shared page frame so empty/error/data states stay visually identical (mirrors /progress). */
-function Shell({
-  heading,
-  body,
-  children,
-}: {
-  heading?: string;
-  body?: string;
-  children?: React.ReactNode;
-}) {
+function Shell({ body, children }: { body?: string; children?: React.ReactNode }) {
   return (
     <main className="flex min-h-dvh flex-col items-center gap-8 bg-white p-6 text-zinc-900">
       <div className="flex w-full max-w-3xl flex-col gap-3">
         <h1 className="text-3xl font-semibold">{C.title}</h1>
         <p className="text-lg text-zinc-700">{C.intro}</p>
-        {heading && <p className="text-lg text-zinc-700">{heading}</p>}
       </div>
 
       <div className="flex w-full max-w-3xl flex-1 flex-col gap-8">
