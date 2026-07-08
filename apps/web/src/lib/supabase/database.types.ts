@@ -149,33 +149,33 @@ export type Database = {
       };
       sessions: {
         Row: {
+          affect_post: string | null;
+          affect_pre: string | null;
           created_at: string;
           ended_at: string | null;
           id: string;
-          patient_affect_post: number | null;
-          patient_affect_pre: number | null;
           patient_id: string;
           started_at: string;
           summary: Json | null;
           updated_at: string;
         };
         Insert: {
+          affect_post?: string | null;
+          affect_pre?: string | null;
           created_at?: string;
           ended_at?: string | null;
           id?: string;
-          patient_affect_post?: number | null;
-          patient_affect_pre?: number | null;
           patient_id: string;
           started_at: string;
           summary?: Json | null;
           updated_at?: string;
         };
         Update: {
+          affect_post?: string | null;
+          affect_pre?: string | null;
           created_at?: string;
           ended_at?: string | null;
           id?: string;
-          patient_affect_post?: number | null;
-          patient_affect_pre?: number | null;
           patient_id?: string;
           started_at?: string;
           summary?: Json | null;

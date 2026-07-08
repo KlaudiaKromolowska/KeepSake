@@ -71,6 +71,17 @@ export const endSessionInputSchema = z
   })
   .strict();
 
+/** Two-tap patient affect (5.4) — the only values the DB CHECK and the kiosk buttons allow. */
+export const affectSchema = z.enum(["content", "unsettled"]);
+
+export const saveSessionAffectInputSchema = z
+  .object({
+    sessionId: z.string().uuid(),
+    point: z.enum(["pre", "post"]),
+    affect: affectSchema,
+  })
+  .strict();
+
 export const saveSessionNoteInputSchema = z
   .object({
     sessionId: z.string().uuid(),
@@ -89,6 +100,7 @@ export const annotateSessionInputSchema = z
   })
   .strict();
 
+export type Affect = z.infer<typeof affectSchema>;
 export type SessionStateInput = z.infer<typeof sessionStateSchema>;
 export type TrialRecordInput = z.infer<typeof trialRecordSchema>;
 export type AnnotateSessionInput = z.infer<typeof annotateSessionInputSchema>;

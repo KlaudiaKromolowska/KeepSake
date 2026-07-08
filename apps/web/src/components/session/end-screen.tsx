@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { SESSION_COPY } from "@/lib/session/copy";
+import type { Affect } from "@/lib/session/schema";
+import { AffectButtons } from "./affect-prompt";
 import { DebriefPanel } from "./debrief-panel";
 
 export function EndScreen({
@@ -11,6 +13,7 @@ export function EndScreen({
   mastered,
   rescopeRequired,
   onSaveNote,
+  onAffect,
   onHome,
 }: {
   sessionId: string;
@@ -19,10 +22,12 @@ export function EndScreen({
   mastered: boolean;
   rescopeRequired: boolean;
   onSaveNote: (note: string) => Promise<boolean>;
+  onAffect: (affect: Affect) => void;
   onHome: () => void;
 }) {
   const [note, setNote] = useState("");
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [affectGiven, setAffectGiven] = useState(false);
 
   async function handleSave() {
     setStatus("saving");
@@ -43,6 +48,23 @@ export function EndScreen({
         {mastered && <LaurelIcon />}
         {mastered ? SESSION_COPY.ended.masteredLine : SESSION_COPY.ended.closeLine}
       </p>
+
+      {/* Post-affect (5.4): inline and optional — ignoring it and heading home is the skip. */}
+      {affectGiven ? (
+        <p role="status" className="text-2xl text-zinc-700">
+          {SESSION_COPY.affect.thanks}
+        </p>
+      ) : (
+        <div className="flex flex-col items-center gap-4">
+          <p className="text-2xl text-zinc-700">{SESSION_COPY.affect.postQuestion}</p>
+          <AffectButtons
+            onPick={(affect) => {
+              setAffectGiven(true);
+              onAffect(affect);
+            }}
+          />
+        </div>
+      )}
 
       {rescopeRequired && (
         <p className="flex max-w-xl items-center gap-3 border-l-4 border-amber-700 bg-amber-50 p-4 text-left text-xl text-amber-900">

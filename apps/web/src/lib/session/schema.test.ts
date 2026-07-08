@@ -2,6 +2,7 @@ import { defaultsForEtiology, startSession } from "@keepsake/core/sr";
 import { describe, expect, it } from "vitest";
 import {
   annotateSessionInputSchema,
+  saveSessionAffectInputSchema,
   saveSessionNoteInputSchema,
   sessionStateSchema,
   trialRecordSchema,
@@ -167,6 +168,53 @@ describe("saveSessionNoteInputSchema", () => {
   it("rejects a note over the length cap", () => {
     expect(
       saveSessionNoteInputSchema.safeParse({ sessionId, note: "a".repeat(2001) }).success,
+    ).toBe(false);
+  });
+});
+
+describe("saveSessionAffectInputSchema", () => {
+  const sessionId = "11111111-1111-4111-8111-111111111111";
+
+  it("accepts both affect values at both points", () => {
+    for (const point of ["pre", "post"] as const) {
+      for (const affect of ["content", "unsettled"] as const) {
+        expect(saveSessionAffectInputSchema.safeParse({ sessionId, point, affect }).success).toBe(
+          true,
+        );
+      }
+    }
+  });
+
+  it("rejects any affect outside the two literals", () => {
+    for (const affect of ["happy", "sad", 3, "", null]) {
+      expect(
+        saveSessionAffectInputSchema.safeParse({ sessionId, point: "pre", affect }).success,
+      ).toBe(false);
+    }
+  });
+
+  it("rejects an unknown point and extra keys (strict)", () => {
+    expect(
+      saveSessionAffectInputSchema.safeParse({ sessionId, point: "mid", affect: "content" })
+        .success,
+    ).toBe(false);
+    expect(
+      saveSessionAffectInputSchema.safeParse({
+        sessionId,
+        point: "pre",
+        affect: "content",
+        extra: 1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a malformed sessionId", () => {
+    expect(
+      saveSessionAffectInputSchema.safeParse({
+        sessionId: "not-a-uuid",
+        point: "pre",
+        affect: "content",
+      }).success,
     ).toBe(false);
   });
 });
