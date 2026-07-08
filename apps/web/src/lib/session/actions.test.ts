@@ -653,6 +653,63 @@ describe("endSessionAction", () => {
     expect(p.schedule_mode).toBe("between");
   });
 
+  it("(c2) existing BOOSTER schedule + start probe recall → onBoosterOutcome advances the step", async () => {
+    const existingDue = "2023-11-10T00:00:00.000Z";
+    const { client, calls } = endClient(
+      { ended_at: null, summary: { startProbe: true }, patient_id: "p-1" },
+      {
+        schedule_mode: "booster",
+        between_session_gap_days: 0,
+        booster_step: 1,
+        next_due_at: existingDue,
+        mastered_at: "2023-11-01T00:00:00.000Z",
+      },
+    );
+    mockUser(client);
+    const s = snap({
+      endReason: "caregiver",
+      progress: { ...snap().progress, mastered: true, startStreak: config.masteryStreak },
+      trials: [
+        { intervalSec: 0, outcome: "recall", isScreening: false, corrected: false, at: NOW },
+      ],
+    });
+    await endSessionAction({ sessionId: SESSION_ID, targetId: TARGET_ID, snapshot: s });
+    const ts = calls.find((c) => c.table === "target_state" && c.verb === "upsert");
+    const p = ts?.payload as Record<string, unknown>;
+    // recall in booster mode advances step 1 → 2 (cadence 30d); NOT reset to step 0
+    expect(p.schedule_mode).toBe("booster");
+    expect(p.booster_step).toBe(2);
+    expect(p.next_due_at).toBe(new Date(NOW + config.boosterCadenceDays[2] * DAY).toISOString());
+    // mastered_at is preserved, never re-stamped
+    expect(p.mastered_at).toBe("2023-11-01T00:00:00.000Z");
+  });
+
+  it("(c3) existing BOOSTER schedule + start probe miss → onBoosterOutcome drops the step", async () => {
+    const existingDue = "2023-11-10T00:00:00.000Z";
+    const { client, calls } = endClient(
+      { ended_at: null, summary: { startProbe: true }, patient_id: "p-1" },
+      {
+        schedule_mode: "booster",
+        between_session_gap_days: 0,
+        booster_step: 2,
+        next_due_at: existingDue,
+        mastered_at: "2023-11-01T00:00:00.000Z",
+      },
+    );
+    mockUser(client);
+    const s = snap({
+      endReason: "struggle",
+      progress: { ...snap().progress, mastered: true, startStreak: 0 },
+      trials: [{ intervalSec: 0, outcome: "miss", isScreening: false, corrected: true, at: NOW }],
+    });
+    await endSessionAction({ sessionId: SESSION_ID, targetId: TARGET_ID, snapshot: s });
+    const ts = calls.find((c) => c.table === "target_state" && c.verb === "upsert");
+    const p = ts?.payload as Record<string, unknown>;
+    expect(p.schedule_mode).toBe("booster");
+    expect(p.booster_step).toBe(1); // 2 → 1
+    expect(p.next_due_at).toBe(new Date(NOW + config.boosterCadenceDays[1] * DAY).toISOString());
+  });
+
   it("(d) existing schedule, no start probe → schedule unchanged", async () => {
     const existingDue = "2023-11-10T00:00:00.000Z";
     const { client, calls } = endClient(

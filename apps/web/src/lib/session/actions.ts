@@ -5,6 +5,7 @@ import {
   afterMastery,
   canResume,
   defaultsForEtiology,
+  onBoosterOutcome,
   onSessionStartOutcome,
   resumeSession,
   type ScheduleState,
@@ -379,10 +380,16 @@ export async function endSessionAction(input: unknown): Promise<ActionResult<nul
 
   let sched = existing;
   if (snapshot.endReason === "mastered") {
-    sched = afterMastery(at, config); // between-mode result is discarded per the §5 contract
+    sched = afterMastery(at, config); // one-time handoff; between-mode result is discarded (§5)
   } else {
     if (existing && startProbe && snapshot.trials.length > 0) {
-      sched = onSessionStartOutcome(existing, snapshot.trials[0].outcome, at, config).state;
+      // Dispatch by the persisted mode: a mastered target runs booster sessions whose cadence
+      // grows via `onBoosterOutcome`; a pre-mastery target updates its between-session gap.
+      const outcome = snapshot.trials[0].outcome;
+      sched =
+        existing.mode === "booster"
+          ? onBoosterOutcome(existing, outcome, at, config).state
+          : onSessionStartOutcome(existing, outcome, at, config).state;
     }
     if (!existing && snapshot.endReason === "ceiling") sched = afterCeilingHandoff(at, config);
   }
