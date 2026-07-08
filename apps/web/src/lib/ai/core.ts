@@ -1,0 +1,200 @@
+/**
+ * Keepsake AI core — SERVER-ONLY. Owns the single Anthropic client, quota enforcement, structured
+ * generation, text streaming, and fixture replay. Every Phase-4 AI feature is a thin prompt +
+ * schema over this module. Never import it from a Client Component or any browser-reachable path:
+ * `ANTHROPIC_API_KEY` is read implicitly by the SDK and must never reach the client bundle.
+ * `server-only` isn't an existing dependency (see lib/supabase/server.ts); this comment + code
+ * review is the guard.
+ */
+import Anthropic from "@anthropic-ai/sdk";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { loadFixture } from "@keepsake/core/prompts/fixtures";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { z } from "zod";
+import type { Database } from "@/lib/supabase/database.types";
+
+export type AiKind = "wizard" | "vision" | "debrief" | "distractors" | "rct";
+
+/** Per-user rolling-hour and global rolling-day caps. Public repo + demo login = credit-drain risk. */
+export const AI_USER_HOURLY_LIMIT = 20;
+export const AI_GLOBAL_DAILY_LIMIT = 200;
+
+const MODEL_SONNET = "claude-sonnet-5";
+const MODEL_HAIKU = "claude-haiku-4-5";
+const GENERIC_UNAVAILABLE = "The assistant is unavailable right now.";
+
+/** Quota (per-user or global) exceeded, or usage could not be verified/recorded. */
+export class QuotaError extends Error {}
+/** Any Anthropic failure — surfaced with a generic message, never the raw provider error text. */
+export class AiUnavailableError extends Error {}
+
+const fixturesEnabled = () => process.env.CLAUDE_FIXTURES === "1";
+
+// Lazy, module-level singleton so fixture mode and unit tests never need a key or a live client.
+let anthropic: Anthropic | null = null;
+function client(): Anthropic {
+  if (!anthropic) anthropic = new Anthropic({ maxRetries: 1 });
+  return anthropic;
+}
+
+function logCacheUsage(usage: { cache_read_input_tokens?: number | null } | undefined): void {
+  if (process.env.NODE_ENV === "production") return;
+  // biome-ignore lint/suspicious/noConsole: dev-only cache-hit diagnostic (see PLAN prompt caching).
+  console.debug(`ai cache_read_input_tokens=${usage?.cache_read_input_tokens ?? 0}`);
+}
+
+/**
+ * Enforce quota BEFORE any Anthropic call, then record one usage row on the pass path. Per-user
+ * count uses the RLS'd user client (own rows only); the global count uses the SECURITY DEFINER rpc.
+ * The row is inserted as soon as the check passes — so a quota-passing call is counted even if the
+ * model call later fails. Simplest honest accounting; over-counts only on a downstream failure.
+ */
+export async function assertAiQuota(
+  supabase: SupabaseClient<Database>,
+  kind: AiKind,
+): Promise<void> {
+  const {
+    data: { user },
+    error: userErr,
+  } = await supabase.auth.getUser();
+  if (userErr || !user) throw new QuotaError("You need to be signed in.");
+
+  const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  // RLS restricts this to the caller's own rows, so it is the per-user hourly count directly.
+  const { count, error: countErr } = await supabase
+    .from("ai_usage")
+    .select("id", { count: "exact", head: true })
+    .gte("created_at", hourAgo);
+  if (countErr) {
+    console.error("assertAiQuota: user count", countErr);
+    throw new QuotaError("Could not verify usage limits.");
+  }
+  if ((count ?? 0) >= AI_USER_HOURLY_LIMIT) {
+    throw new QuotaError("You've reached this hour's limit for AI help. Please try again later.");
+  }
+
+  const { data: globalCount, error: rpcErr } = await supabase.rpc("ai_calls_today");
+  if (rpcErr) {
+    console.error("assertAiQuota: global count", rpcErr);
+    throw new QuotaError("Could not verify usage limits.");
+  }
+  if (Number(globalCount ?? 0) >= AI_GLOBAL_DAILY_LIMIT) {
+    throw new QuotaError("The daily limit for AI help has been reached. Please try again later.");
+  }
+
+  const { error: insertErr } = await supabase
+    .from("ai_usage")
+    .insert({ caregiver_id: user.id, kind });
+  if (insertErr) {
+    console.error("assertAiQuota: insert", insertErr);
+    throw new QuotaError("Could not record AI usage.");
+  }
+}
+
+type Effort = "low" | "medium" | "high";
+
+/** Sonnet caches thinking control via output_config.effort; Haiku supports neither effort nor thinking. */
+function outputConfig<F>(model: string, effort: Effort | undefined, format: F) {
+  if (model === MODEL_HAIKU) return { format };
+  return { format, effort: effort ?? "medium" };
+}
+
+function systemBlocks(system: string) {
+  return [{ type: "text" as const, text: system, cache_control: { type: "ephemeral" as const } }];
+}
+
+/**
+ * Structured generation with schema-validated JSON. Defaults to Sonnet 5; pass model
+ * `claude-haiku-4-5` for cheap grading (effort is then ignored). A null parse (schema mismatch)
+ * retries once, then throws AiUnavailableError. Fixture mode returns the recorded, schema-checked
+ * object without touching the SDK.
+ */
+export async function generateStructured<T>(opts: {
+  kind: AiKind;
+  schema: z.ZodType<T>;
+  system: string;
+  user: Anthropic.MessageParam["content"];
+  model?: string;
+  maxTokens?: number;
+  effort?: Effort;
+}): Promise<T> {
+  if (fixturesEnabled()) return opts.schema.parse(loadFixture(opts.kind));
+
+  const model = opts.model ?? MODEL_SONNET;
+  const request = {
+    model,
+    max_tokens: opts.maxTokens ?? 2048,
+    system: systemBlocks(opts.system),
+    messages: [{ role: "user" as const, content: opts.user }],
+    output_config: outputConfig(model, opts.effort, zodOutputFormat(opts.schema)),
+  };
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let response: Awaited<ReturnType<ReturnType<typeof client>["messages"]["parse"]>>;
+    try {
+      response = await client().messages.parse(request);
+    } catch (err) {
+      console.error(`ai:${opts.kind} messages.parse failed`, err);
+      throw new AiUnavailableError(GENERIC_UNAVAILABLE);
+    }
+    logCacheUsage(response.usage);
+    if (response.parsed_output !== null) return response.parsed_output as T;
+  }
+  throw new AiUnavailableError(GENERIC_UNAVAILABLE);
+}
+
+const encoder = new TextEncoder();
+
+function chunkedTextStream(text: string): ReadableStream<Uint8Array> {
+  const size = 48;
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (let i = 0; i < text.length; i += size) {
+        controller.enqueue(encoder.encode(text.slice(i, i + size)));
+      }
+      controller.close();
+    },
+  });
+}
+
+/**
+ * Stream a plain-text response as raw UTF-8 text-delta chunks (no SSE framing — a route handler
+ * sets the streaming response + Content-Type and forwards this body; the client reads the body with
+ * a ReadableStream reader and appends decoded text). Sonnet 5 only. Fixture mode streams the
+ * recorded text in chunks. Failures surface as an AiUnavailableError on the stream.
+ */
+export function streamText(opts: {
+  kind: AiKind;
+  system: string;
+  user: string;
+  maxTokens?: number;
+  effort?: Effort;
+}): ReadableStream<Uint8Array> {
+  if (fixturesEnabled()) return chunkedTextStream(String(loadFixture(opts.kind)));
+
+  const request = {
+    model: MODEL_SONNET,
+    max_tokens: opts.maxTokens ?? 2048,
+    system: systemBlocks(opts.system),
+    messages: [{ role: "user" as const, content: opts.user }],
+    output_config: { effort: opts.effort ?? "medium" },
+  };
+
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        const stream = client().messages.stream(request);
+        for await (const event of stream) {
+          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+            controller.enqueue(encoder.encode(event.delta.text));
+          }
+        }
+        logCacheUsage((await stream.finalMessage()).usage);
+        controller.close();
+      } catch (err) {
+        console.error(`ai:${opts.kind} stream failed`, err);
+        controller.error(new AiUnavailableError(GENERIC_UNAVAILABLE));
+      }
+    },
+  });
+}

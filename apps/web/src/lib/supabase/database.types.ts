@@ -28,6 +28,27 @@ export type Database = {
   };
   public: {
     Tables: {
+      ai_usage: {
+        Row: {
+          caregiver_id: string;
+          created_at: string;
+          id: string;
+          kind: string;
+        };
+        Insert: {
+          caregiver_id: string;
+          created_at?: string;
+          id?: string;
+          kind: string;
+        };
+        Update: {
+          caregiver_id?: string;
+          created_at?: string;
+          id?: string;
+          kind?: string;
+        };
+        Relationships: [];
+      };
       audit_log: {
         Row: {
           action: string;
@@ -338,7 +359,7 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      ai_calls_today: { Args: never; Returns: number };
     };
     Enums: {
       etiology: "alzheimers" | "vascular" | "lewy" | "parkinsons" | "mixed" | "unspecified";
