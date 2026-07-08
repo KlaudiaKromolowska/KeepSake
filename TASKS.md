@@ -132,13 +132,21 @@
 
 ## Phase 5 — Polish & feature freeze (Day 5; freeze 12:00)
 
-- [ ] **5.1** Per-target **acquisition chart** (non-color-reliant, describable). ⛔
-- [ ] **5.2** a11y pass: axe run + keyboard/screen-reader once-over.
-- [ ] **5.3** Wellness-safe copy + crisis footer + "not a medical device" (EN; PL machine-translated
-  only if ahead).
-- [ ] **5.4** Patient-affect two-tap capture (pre/post) — only if on schedule. ✂️D3.
-- [ ] **5.5** **Canned-replay Claude fixtures** recorded from real outputs (wizard, self-critique,
-  vision, debrief, RCT-in-a-box answer) for film takes + live final. ⛔ for the recording.
+- [x] **5.1** Per-target **acquisition chart** (non-color-reliant, describable). ⛔ ✅ **D2** (PR #8:
+  log-scale SVG, no chart dep, grayscale-verified, aria summary + table twin; downbeat-summary copy
+  fix in PR #11).
+- [x] **5.2** a11y pass: axe run + keyboard/screen-reader once-over. ✅ **D2** (PR #11: Lighthouse
+  a11y 100 on all 7 surfaces; evidence in docs/a11y-pass-2026-07-08.md; NVDA ear-pass still
+  recommended before the film).
+- [x] **5.3** Wellness-safe copy + crisis footer + "not a medical device" (EN; PL machine-translated
+  only if ahead). ✅ **D2** (PR #6: audit found existing copy already clean; footer added; PL not done).
+- [x] **5.4** Patient-affect two-tap capture (pre/post) — only if on schedule. ✂️D3. ✅ **D2** (PR #9:
+  content/unsettled text columns via new migration — supersedes the smallint 1–5 sketch; skippable,
+  never blocks the flow).
+- [x] **5.5** **Canned-replay Claude fixtures** recorded from real outputs (wizard, self-critique,
+  vision, debrief, RCT-in-a-box answer) for film takes + live final. ⛔ for the recording. ✅ **D2**
+  (vision recorded once lena.jpg existed — verdict "good"; per-kind recording via
+  `pnpm fixtures:record <kind>`; grade fixture is a placeholder until one live record run).
 - [x] **5.6** *(pulled forward to D2, Phase 4)* **RCT-in-a-box mini study report** (§1b v4.1 jaw-drop — now MVP, in the never-cut
   chain): Claude analyzes real trial logs → acquisition rate, retention/decay, interval band,
   booster rec, n=1 caveats. Live on camera if on schedule; **degrades to fixture-replay, never
@@ -147,6 +155,15 @@
   Q&A; only build UI for it if D5 is ahead of schedule.
 - [ ] **5.8 Gate (D5 PM, mandatory): scratch recording of the full beat sheet — watch it, fix
   what reads badly.** SLP drop-dead decision.
+
+**Beyond-plan items shipped D2 (V1 pulls, all merged):** V1 speech-graded recall (PR #12 — ASR →
+fuzzy → Haiku fallback, flag `NEXT_PUBLIC_SPEECH=1`, default OFF), practice-due status on dashboard
+(PR #13 — booster-loop visibility), kiosk speech layer (PR #14 — device speaks the correction per
+docs/tts-decision.md, mute toggle, DEMO_MODE mp3 swap; **not yet auditioned by ear**), AI-quality
+batch (PR #10 — alias dedupe, vision gets target context, golden set confirmed 10/10).
+**Deploy debt:** prod (keepsake-nu.vercel.app) still runs Phase 2; remote Supabase needs the three
+new migrations (affect_two_tap, ai_usage_grade_kind, api_role_grants) via `supabase db push` before
+or with the next `vercel deploy --prod`.
 
 ## Phase 6 — The film & the repo (Day 6) ⛔
 
