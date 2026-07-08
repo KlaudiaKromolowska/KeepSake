@@ -1,0 +1,9 @@
+{
+  "thinking": "For someone with Alzheimer's, free recall is the right approach here since the granddaughter's name is personally meaningful and well-established in long-term memory—it's the kind of episodic detail that tends to be preserved. Keeping the current free recall format makes sense and provides consistency.",
+  "recommendation": {
+    "answerFormat": "free_recall",
+    "responseWindow": "a few quiet seconds, unhurried",
+    "cueModality": "personal/relationship cue (e.g. a photo or gentle reminder of who she is)",
+    "why": "Alzheimer's profiles generally respond well to free recall, especially for a warmly familiar personal detail like a granddaughter's name."
+  }
+}

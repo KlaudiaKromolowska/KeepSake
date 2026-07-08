@@ -15,6 +15,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildDistractorsPrompt, DISTRACTORS_SYSTEM } from "@keepsake/core/prompts/distractors";
+import { buildEtiologyUserMessage, ETIOLOGY_SYSTEM } from "@keepsake/core/prompts/etiology";
 import {
   buildRctReportPrompt,
   type RctAnnotation,
@@ -27,8 +28,10 @@ import { buildVisionUserText, VISION_SYSTEM_PROMPT } from "@keepsake/core/prompt
 import { defaultsForEtiology, type Etiology } from "@keepsake/core/sr";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { generateStructured, streamText } from "@/lib/ai/core";
+import { generateStructured, streamText, streamThinkingJson } from "@/lib/ai/core";
+import { STREAM_JSON_SENTINEL } from "@/lib/ai/stream-sentinel";
 import { fetchDebriefAggregate } from "@/lib/debrief/aggregate";
+import { etiologyRecSchema } from "@/lib/etiology/schema";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { mediaTypeFor, photoQaSchema } from "@/lib/wizard/vision-schema";
 import { loadWebEnv, requireEnv } from "./env";
@@ -412,9 +415,52 @@ async function recordRct(
   console.error("record-fixtures: rct — recorded");
 }
 
+// --- etiology (extended-thinking format recommendation) ----------------------------------------
+
+async function recordEtiology(
+  admin: Admin,
+  patient: { id: string; etiology: string },
+): Promise<void> {
+  const { data: target } = await admin
+    .from("targets")
+    .select("question, answer_format")
+    .eq("patient_id", patient.id)
+    .in("status", ["active", "maintenance"])
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  // `reconcile: (r) => r` captures the RAW model recommendation (not the reconciled shape) so the
+  // fixture is {thinking, recommendation} — exactly what streamThinkingJson's fixture branch reads.
+  const stream = streamThinkingJson({
+    kind: "etiology",
+    system: ETIOLOGY_SYSTEM,
+    user: buildEtiologyUserMessage({
+      etiology: patient.etiology,
+      question: target?.question ?? null,
+      currentAnswerFormat: target?.answer_format ?? null,
+      locale: "en",
+    }),
+    schema: etiologyRecSchema,
+    reconcile: (r) => r,
+    maxTokens: 2048,
+    effort: "high",
+  });
+  const out = await readStream(stream);
+  const idx = out.lastIndexOf(STREAM_JSON_SENTINEL);
+  if (idx === -1) throw new Error("etiology stream missing the JSON sentinel");
+  const thinking = out.slice(0, idx);
+  const recommendation = JSON.parse(out.slice(idx + STREAM_JSON_SENTINEL.length)) as unknown;
+  if (recommendation === null) {
+    console.error("record-fixtures: etiology — WARNING model rec was null (fallback also failed)");
+  }
+  writeStructuredFixture("etiology", { thinking, recommendation });
+  console.error("record-fixtures: etiology — recorded");
+}
+
 // --- main -------------------------------------------------------------------------------------
 
-const ALL_KINDS = ["wizard", "distractors", "grade", "vision", "debrief", "rct"];
+const ALL_KINDS = ["wizard", "distractors", "grade", "vision", "debrief", "rct", "etiology"];
 
 async function main(): Promise<void> {
   loadWebEnv();
@@ -445,6 +491,7 @@ async function main(): Promise<void> {
   if (kinds.has("vision")) await recordVision(admin, patient.id);
   if (kinds.has("debrief")) await recordDebrief(admin, patient.id);
   if (kinds.has("rct")) await recordRct(admin, patient);
+  if (kinds.has("etiology")) await recordEtiology(admin, patient);
 
   console.error("record-fixtures: done — see packages/core/prompts/fixtures/*.json");
 }

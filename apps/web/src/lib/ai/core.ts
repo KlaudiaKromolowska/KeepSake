@@ -12,8 +12,9 @@ import { loadFixture } from "@keepsake/core/prompts/fixtures";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { z } from "zod";
 import type { Database } from "@/lib/supabase/database.types";
+import { STREAM_JSON_SENTINEL } from "./stream-sentinel";
 
-export type AiKind = "wizard" | "vision" | "debrief" | "distractors" | "rct" | "grade";
+export type AiKind = "wizard" | "vision" | "debrief" | "distractors" | "rct" | "grade" | "etiology";
 
 /** Per-user rolling-hour and global rolling-day caps. Public repo + demo login = credit-drain risk. */
 export const AI_USER_HOURLY_LIMIT = 20;
@@ -195,6 +196,113 @@ export function streamText(opts: {
         console.error(`ai:${opts.kind} stream failed`, err);
         controller.error(new AiUnavailableError(GENERIC_UNAVAILABLE));
       }
+    },
+  });
+}
+
+/** First balanced-ish `{…}` slice of model text — tolerates prose or code fences around the JSON. */
+function extractJsonObject(text: string): string | null {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  return start === -1 || end < start ? null : text.slice(start, end + 1);
+}
+
+/**
+ * Extended-thinking stream (Sonnet 5 only): forwards Claude's VISIBLE reasoning (summarized
+ * thinking blocks) as raw UTF-8 text, then a framed trailer — STREAM_JSON_SENTINEL followed by one
+ * JSON line, the reconciled result `R`. The model's own text output is a JSON object (never streamed
+ * to the client) validated with `schema`; on parse failure a non-thinking `generateStructured` call
+ * is the fallback, and if that also fails `reconcile(null)` still yields a deterministic-only
+ * result. `reconcile` is the code-side guard — model output is NEVER emitted without passing
+ * through it, so a rec that contradicts the deterministic mapping can be overridden there.
+ *
+ * Note (Sonnet 5): thinking uses `{type:"adaptive", display:"summarized"}` — `budget_tokens` is
+ * rejected with a 400 on this model, and the default display "omitted" streams empty thinking text.
+ * Extended thinking is done via a plain text+thinking stream (no forced tool/`output_config.format`),
+ * so it stays compatible with thinking; the fallback path is the one that uses structured outputs.
+ */
+export function streamThinkingJson<T, R>(opts: {
+  kind: AiKind;
+  system: string;
+  user: string;
+  schema: z.ZodType<T>;
+  reconcile: (modelRec: T | null) => R;
+  maxTokens?: number;
+  effort?: Effort;
+}): ReadableStream<Uint8Array> {
+  const trailer = (result: R) => encoder.encode(STREAM_JSON_SENTINEL + JSON.stringify(result));
+
+  if (fixturesEnabled()) {
+    const fixture = loadFixture(opts.kind) as { thinking?: unknown; recommendation?: unknown };
+    const thinking = typeof fixture.thinking === "string" ? fixture.thinking : "";
+    const parsed = opts.schema.safeParse(fixture.recommendation);
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let i = 0; i < thinking.length; i += 48) {
+          controller.enqueue(encoder.encode(thinking.slice(i, i + 48)));
+        }
+        controller.enqueue(trailer(opts.reconcile(parsed.success ? parsed.data : null)));
+        controller.close();
+      },
+    });
+  }
+
+  const request = {
+    model: MODEL_SONNET,
+    max_tokens: opts.maxTokens ?? 2048,
+    system: systemBlocks(opts.system),
+    messages: [{ role: "user" as const, content: opts.user }],
+    thinking: { type: "adaptive" as const, display: "summarized" as const },
+    output_config: { effort: opts.effort ?? "medium" },
+  };
+
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let jsonBuffer = "";
+      try {
+        const stream = client().messages.stream(request);
+        for await (const event of stream) {
+          if (event.type === "content_block_delta") {
+            if (event.delta.type === "thinking_delta") {
+              controller.enqueue(encoder.encode(event.delta.thinking));
+            } else if (event.delta.type === "text_delta") {
+              jsonBuffer += event.delta.text;
+            }
+          }
+        }
+        logCacheUsage((await stream.finalMessage()).usage);
+      } catch (err) {
+        console.error(`ai:${opts.kind} thinking stream failed`, err);
+        controller.error(new AiUnavailableError(GENERIC_UNAVAILABLE));
+        return;
+      }
+
+      let modelRec: T | null = null;
+      const raw = extractJsonObject(jsonBuffer);
+      if (raw) {
+        try {
+          modelRec = opts.schema.parse(JSON.parse(raw));
+        } catch {
+          modelRec = null;
+        }
+      }
+      if (modelRec === null) {
+        // Reasoning already streamed; recover only the structured rec via a non-thinking call.
+        try {
+          modelRec = await generateStructured({
+            kind: opts.kind,
+            schema: opts.schema,
+            system: opts.system,
+            user: opts.user,
+            ...(opts.maxTokens !== undefined ? { maxTokens: opts.maxTokens } : {}),
+            ...(opts.effort !== undefined ? { effort: opts.effort } : {}),
+          });
+        } catch {
+          modelRec = null;
+        }
+      }
+      controller.enqueue(trailer(opts.reconcile(modelRec)));
+      controller.close();
     },
   });
 }
