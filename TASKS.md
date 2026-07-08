@@ -33,7 +33,9 @@
 - [x] **0.4** Repo hygiene: MIT LICENSE ✓, README stub ✓, `docs/demo-video.md` v0 ✓ (script
   §16.4), CI workflow (biome + tsc + vitest + build) ✓ — badge once CI has run on main.
 - [ ] **0.5** Hackathon admin (external, time-sensitive — do not defer):
-  - [ ] SLP outreach sent (call ≤ D4, drop-dead D5; fallback = card + quote)
+  - [x] SLP outreach sent → **practitioner response received D2** (Centrum Montessori Senior —
+    detailed feedback folded into Phase 3, see `docs/expert-feedback-2026-07-08.md`; consent
+    ask for naming/quote drafted, ⚠️ human: send reply)
   - [ ] "New Work Only" scaffolding question in #questions
   - [ ] Submission-portal mechanics + AI-disclosure rules confirmed
   - [x] ~~Demo domain~~ → free `keepsake-nu.vercel.app` (no-spend rule) · ~~manual order~~ →
@@ -100,6 +102,10 @@
   rung, else graceful discard).
 - [ ] **3.6** Wire trials → Supabase; `DEMO_SPEED` compression profile (first 15s real,
   accelerate >60s — §1b).
+- [ ] **3.7** Practitioner-feedback fold-in (D2 email — `docs/expert-feedback-2026-07-08.md`):
+  caregiver answer hint on probe · no rigid scheduling copy (mastery celebrated, never
+  scheduled) · **`interval_override` engine event + "Adjust wait" control** (overrides logged
+  as annotations) · session note field · "answer card introduced" annotation.
 - [ ] **Gate (D3 EOD): full scripted session runs in the browser at demo speed.** Miss → cut
   line 2 (affect capture out; browser-default TTS; static distractors).
 
