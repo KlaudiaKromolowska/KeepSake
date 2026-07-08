@@ -5,7 +5,7 @@
 // scripts using the key from env, not a user path (PLAN.md Task 7).
 import { buildWizardPrompt, refineUserMessage } from "@keepsake/core/prompts/wizard";
 import { generateStructured } from "@/lib/ai/core";
-import { validateTarget } from "@/lib/wizard/rules";
+import { normalizeVariants, validateTarget } from "@/lib/wizard/rules";
 import { type WizardProposal, wizardProposalSchema } from "@/lib/wizard/schema";
 
 const LOCALE = "en";
@@ -55,5 +55,13 @@ export async function runWizardFlow(
     check = validateTarget(proposal);
   }
 
-  return { proposal, firstViolations, reAsked, finalViolations: check.ok ? [] : check.violations };
+  return {
+    proposal: {
+      ...proposal,
+      acceptedVariants: normalizeVariants(proposal.answer, proposal.acceptedVariants),
+    },
+    firstViolations,
+    reAsked,
+    finalViolations: check.ok ? [] : check.violations,
+  };
 }

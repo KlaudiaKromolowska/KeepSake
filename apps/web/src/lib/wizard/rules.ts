@@ -67,3 +67,21 @@ export function validateTarget(t: TargetLike): ValidationResult {
 
   return violations.length === 0 ? { ok: true } : { ok: false, violations };
 }
+
+/**
+ * Normalize Claude's acceptedVariants (model output is untrusted): trim, drop empties, drop any
+ * variant equal to the answer, and dedupe — both case-insensitively, keeping the first spelling.
+ * A live call returned the answer itself as a variant, which the UI rendered as "Lena, Lena".
+ */
+export function normalizeVariants(answer: string, variants: string[]): string[] {
+  const seen = new Set([answer.trim().toLowerCase()]);
+  const out: string[] = [];
+  for (const raw of variants) {
+    const variant = raw.trim();
+    const key = variant.toLowerCase();
+    if (variant === "" || seen.has(key)) continue;
+    seen.add(key);
+    out.push(variant);
+  }
+  return out;
+}
