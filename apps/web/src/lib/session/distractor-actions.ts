@@ -1,7 +1,6 @@
 "use server";
 
-import { buildDistractorsPrompt } from "@keepsake/core/prompts/distractors";
-import { SR_SYSTEM } from "@keepsake/core/prompts/sr-protocol";
+import { buildDistractorsPrompt, DISTRACTORS_SYSTEM } from "@keepsake/core/prompts/distractors";
 import { z } from "zod";
 import { requireUser } from "@/lib/actions";
 import { assertAiQuota, generateStructured } from "@/lib/ai/core";
@@ -45,7 +44,7 @@ export async function personalizedDistractorsAction(): Promise<{
     const result = await generateStructured({
       kind: "distractors",
       schema: distractorsSchema,
-      system: SR_SYSTEM,
+      system: DISTRACTORS_SYSTEM,
       user: buildDistractorsPrompt({
         displayName: patient.display_name,
         notes: patient.notes,

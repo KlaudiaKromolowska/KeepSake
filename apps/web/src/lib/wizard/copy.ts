@@ -11,7 +11,7 @@ export const WIZARD_COPY = {
     cardHint: "Shape a name, place, or routine into a practice question.",
     descriptionLabel: "Tell us about the memory",
     descriptionHint:
-      "For example: “My daughter Sarah visits every Sunday. He keeps forgetting her name.”",
+      "For example: “My daughter Sarah visits every Sunday. She keeps forgetting her name.”",
     placeholder: "Describe the memory in your own words…",
     generate: "Ask Claude to shape it",
     generating: "Claude is thinking this through…",

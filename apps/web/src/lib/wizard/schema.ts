@@ -12,7 +12,7 @@ export const wizardProposalSchema = z.object({
   answer: z.string().min(1).max(120),
   acceptedVariants: z.array(z.string().min(1).max(80)).max(10),
   answerFormat: z.enum(["free_recall", "recognition"]),
-  redFlags: z.array(z.string().min(1).max(200)).max(8),
+  redFlags: z.array(z.string().min(1).max(300)).max(8),
   rationale: z.string().min(1).max(600),
   selfCritique: z.object({
     rejectedDraft: z.object({

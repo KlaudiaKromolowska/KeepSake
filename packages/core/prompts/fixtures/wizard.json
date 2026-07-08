@@ -1,17 +1,17 @@
 {
-  "question": "Who visits you on Sundays?",
-  "answer": "Sarah, your daughter",
-  "acceptedVariants": ["Sarah", "Your daughter Sarah"],
+  "question": "Who is Sarah?",
+  "answer": "Your daughter",
+  "acceptedVariants": ["My daughter", "His daughter"],
   "answerFormat": "free_recall",
   "redFlags": [
-    "If the day or timing ever changes, focus on the person, not the schedule, to keep this errorless."
+    "This can feel emotional if the answer doesn't come right away — keep the mood light and reassuring."
   ],
-  "rationale": "Practicing Sarah's name and that she's his daughter can ease the worry he feels when that connection slips his mind.",
+  "rationale": "Anchoring Sarah's name to 'daughter' gives him a warm, stable connection to hold onto each time she visits.",
   "selfCritique": {
     "rejectedDraft": {
-      "question": "Does Sarah visit every Sunday with the kids and bring something sweet?",
-      "answer": "Yes, she brings cake or cookies"
+      "question": "Does Sarah visit every Sunday with the kids?",
+      "answer": "Yes, every Sunday with cake"
     },
-    "reason": "The first version was a yes/no question and bundled several facts (day, food, kids) instead of isolating the single most meaningful one, her name and relationship."
+    "reason": "The first version was a yes/no question and the answer had too many shifting details instead of one stable fact."
   }
 }
