@@ -6,8 +6,11 @@ import { ETIOLOGY_COPY } from "@/lib/etiology/copy";
 import { PROGRESS_COPY } from "@/lib/progress/copy";
 import { REVIEW_COPY } from "@/lib/review/copy";
 import { SCHEDULE_PLAN_COPY } from "@/lib/schedule/copy";
-import { dueStatus, dueStatusLine } from "@/lib/schedule/due-status";
+import { dueStatusLine } from "@/lib/schedule/due-status";
 import { SESSION_COPY } from "@/lib/session/copy";
+import { TARGETS_COPY } from "@/lib/targets/copy";
+import { loadQueue } from "@/lib/targets/load";
+import { classifyTargets, selectSessionTarget, summarizeQueue } from "@/lib/targets/queue";
 import { WIZARD_COPY } from "@/lib/wizard/copy";
 
 export const metadata = { title: "Dashboard — Keepsake" };
@@ -15,37 +18,18 @@ export const metadata = { title: "Dashboard — Keepsake" };
 export default async function DashboardPage() {
   const { user, supabase } = await requireUser();
 
-  const { data: target } = await supabase
-    .from("targets")
-    .select("id, question, patient_id")
-    .in("status", ["active", "maintenance"])
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  // V2 multi-target: aggregate over every practicable target, then pick the one to open on (due
+  // wins; acquisition wins ties). Best-effort — a read failure just yields no CTA, never a break.
+  const queue = await loadQueue(supabase);
+  const now = Date.now();
+  const classified = queue ? classifyTargets(queue.targets, now, queue.patient.timezone) : [];
+  const selectedId = queue ? selectSessionTarget(queue.targets, now, queue.patient.timezone) : null;
+  const selected = classified.find((c) => c.target.id === selectedId) ?? null;
+  const target = selected?.target ?? null;
 
-  // Booster-loop visibility (PLAN §5/§6): one gentle line derived from the persisted schedule.
-  // Best-effort — on any read error the line is simply omitted, never a broken dashboard.
-  let dueLine: string | null = null;
-  if (target) {
-    const [stateRes, patientRes] = await Promise.all([
-      supabase
-        .from("target_state")
-        .select("schedule_mode, next_due_at")
-        .eq("target_id", target.id)
-        .maybeSingle(),
-      supabase.from("patients").select("timezone").eq("id", target.patient_id).maybeSingle(),
-    ]);
-    if (!stateRes.error && !patientRes.error && patientRes.data) {
-      dueLine = dueStatusLine(
-        dueStatus(
-          stateRes.data?.next_due_at ?? null,
-          stateRes.data?.schedule_mode ?? null,
-          Date.now(),
-          patientRes.data.timezone,
-        ),
-      );
-    }
-  }
+  const dueLine = selected ? dueStatusLine(selected.due) : null;
+  const summaryLine =
+    queue && queue.targets.length > 1 ? TARGETS_COPY.summaryLine(summarizeQueue(classified)) : "";
 
   return (
     <>
@@ -66,10 +50,12 @@ export default async function DashboardPage() {
           <p className="text-xl text-zinc-700">{SESSION_COPY.dashboard.noTarget}</p>
         )}
 
+        {summaryLine && <p className="-mt-4 text-lg text-zinc-600">{summaryLine}</p>}
+
         {target && (
           <Link
             href="/schedule"
-            className="-mt-4 flex min-h-[48px] items-center text-lg text-zinc-600 underline underline-offset-4 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+            className="-mt-2 flex min-h-[48px] items-center text-lg text-zinc-600 underline underline-offset-4 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
           >
             {SCHEDULE_PLAN_COPY.cardHint}
           </Link>
@@ -82,6 +68,15 @@ export default async function DashboardPage() {
           <span className="text-2xl font-semibold">{WIZARD_COPY.page.heading}</span>
           <span className="text-lg text-zinc-600">{WIZARD_COPY.page.cardHint}</span>
         </Link>
+
+        {target && (
+          <Link
+            href="/targets"
+            className="-mt-4 flex min-h-[48px] items-center text-lg text-zinc-600 underline underline-offset-4 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+          >
+            {TARGETS_COPY.cardHint}
+          </Link>
+        )}
 
         {target && (
           <Link
