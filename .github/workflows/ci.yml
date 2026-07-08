@@ -46,3 +46,49 @@ jobs:
             esac
           done
       - run: pnpm test:rls
+
+  # Playwright smoke of the never-cut demo chain (Revised_plan.md Day-3 Track A): demo-login →
+  # target wizard → session (recall/miss/unclear) → debrief → RCT report. CLAUDE_FIXTURES=1 means
+  # no real Claude API calls happen — every AI call replays a recorded fixture (see PRs #10/#19,
+  # packages/core/prompts/fixtures/*.json). Independent job so it never slows `ci`/`rls`.
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      DEMO_MODE: "1"
+      DEMO_CAREGIVER_PASSWORD: e2e-demo-password-not-a-secret-2026
+      CLAUDE_FIXTURES: "1"
+      DEMO_SPEED: "20"
+      ANTHROPIC_API_KEY: sk-ant-unused-in-fixture-mode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.75.0
+      - run: supabase start # applies supabase/migrations from the repo root
+      - name: Export local stack credentials
+        run: |
+          supabase status -o env | while IFS='=' read -r key value; do
+            value="${value%\"}"
+            value="${value#\"}"
+            case "$key" in
+              API_URL)
+                echo "SUPABASE_URL=$value" >> "$GITHUB_ENV"
+                echo "NEXT_PUBLIC_SUPABASE_URL=$value" >> "$GITHUB_ENV"
+                ;;
+              ANON_KEY)
+                echo "SUPABASE_ANON_KEY=$value" >> "$GITHUB_ENV"
+                echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$value" >> "$GITHUB_ENV"
+                ;;
+              SERVICE_ROLE_KEY) echo "SUPABASE_SERVICE_ROLE_KEY=$value" >> "$GITHUB_ENV" ;;
+            esac
+          done
+      - run: pnpm seed
+      - run: pnpm build
+      - run: pnpm --filter web exec playwright install --with-deps chromium
+      - run: pnpm --filter web test:e2e
