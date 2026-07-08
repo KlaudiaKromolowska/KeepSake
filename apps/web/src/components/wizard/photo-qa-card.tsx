@@ -1,19 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { WIZARD_COPY } from "@/lib/wizard/copy";
-import { qaPhotoAction } from "@/lib/wizard/vision-actions";
+import { qaPhotoAction, uploadTargetPhotoAction } from "@/lib/wizard/vision-actions";
 import type { PhotoQaResult } from "@/lib/wizard/vision-schema";
 
 const C = WIZARD_COPY.photoQa;
+const ACCEPT = "image/jpeg,image/png,image/webp";
 
 /**
- * "Check the photo" section on the wizard page — shown once a proposal exists. Lists one button per
- * candidate photo the page found on disk (server-checked; this component never touches the
- * filesystem). Tapping a button runs the vision QA action — passing the proposal's question +
- * answer so crop advice points at the person the target is about — and shows its verdict below.
- * An empty `photoOptions` list means no seeded photo exists yet (a Phase-6 asset deliverable) —
- * shows a calm line rather than an empty section.
+ * "Check the photo" section on the wizard page — shown once a proposal exists. The caregiver can
+ * upload their OWN photo (stored securely, scoped to them, then vision-QA'd) or, when the demo has
+ * seeded example photos on disk, check one of those. Either way Claude's verdict — passing the
+ * proposal's question + answer so crop advice points at the right subject — shows below. This
+ * component never touches the filesystem or storage directly; both paths go through server actions.
  */
 export function PhotoQaSection({
   photoOptions,
@@ -24,14 +24,22 @@ export function PhotoQaSection({
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<PhotoQaResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const busy = checking || uploading;
+
+  function begin() {
+    setError(null);
+    setResult(null);
+  }
 
   async function check(imagePath: string) {
     setSelected(imagePath);
     setChecking(true);
-    setError(null);
-    setResult(null);
+    begin();
     try {
       const res = await qaPhotoAction({ imagePath, ...(target ? { target } : {}) });
       if (res.error !== null) setError(res.error);
@@ -43,35 +51,75 @@ export function PhotoQaSection({
     }
   }
 
+  async function upload(file: File) {
+    setUploading(true);
+    begin();
+    try {
+      const fd = new FormData();
+      fd.append("photo", file);
+      if (target) {
+        fd.append("question", target.question);
+        fd.append("answer", target.answer);
+      }
+      const res = await uploadTargetPhotoAction(fd);
+      if (res.error !== null) setError(res.error);
+      else setResult(res.data.qa);
+    } catch {
+      setError(C.errors.uploadFailed);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = ""; // allow re-picking the same file
+    }
+  }
+
   return (
     <section className="flex w-full max-w-2xl flex-col gap-4 rounded-2xl border-2 border-zinc-300 bg-white p-6 text-zinc-900">
       <h2 className="text-xl font-semibold">{C.heading}</h2>
-      {photoOptions.length === 0 ? (
-        <p className="text-base text-zinc-600">{C.noPhotos}</p>
-      ) : (
-        <>
-          <p className="text-base text-zinc-600">{C.intro}</p>
+
+      <div className="flex flex-col gap-3">
+        <h3 className="text-lg font-medium">{C.upload.heading}</h3>
+        <p className="text-base text-zinc-600">{C.upload.intro}</p>
+        <input
+          ref={fileRef}
+          type="file"
+          accept={ACCEPT}
+          disabled={busy}
+          aria-label={C.upload.button}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) upload(file);
+          }}
+          className="min-h-[44px] rounded-xl border-2 border-zinc-400 bg-white p-2 text-base text-zinc-900 file:mr-4 file:min-h-[36px] file:rounded-lg file:border-0 file:bg-zinc-900 file:px-4 file:text-base file:font-medium file:text-white focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:opacity-50"
+        />
+        <p className="text-sm text-zinc-500">{C.upload.consent}</p>
+        {uploading && <p className="text-base text-zinc-500">{C.upload.uploading}</p>}
+      </div>
+
+      {photoOptions.length > 0 && (
+        <div className="flex flex-col gap-3 border-t-2 border-zinc-200 pt-4">
+          <h3 className="text-lg font-medium">{C.upload.exampleHeading}</h3>
           <div className="flex flex-wrap gap-4">
             {photoOptions.map((path) => (
               <button
                 key={path}
                 type="button"
                 onClick={() => check(path)}
-                disabled={checking}
+                disabled={busy}
                 className="min-h-[44px] rounded-xl border-2 border-zinc-400 bg-white px-5 text-base font-medium text-zinc-900 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:opacity-50"
               >
                 {checking && selected === path ? C.checking : fileName(path)}
               </button>
             ))}
           </div>
-          {error && (
-            <p role="alert" className="text-base text-zinc-900">
-              {error}
-            </p>
-          )}
-          {result && <PhotoQaCard result={result} />}
-        </>
+        </div>
       )}
+
+      {error && (
+        <p role="alert" className="text-base text-zinc-900">
+          {error}
+        </p>
+      )}
+      {result && <PhotoQaCard result={result} />}
     </section>
   );
 }
