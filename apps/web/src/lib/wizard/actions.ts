@@ -6,7 +6,7 @@ import { failAction, requireUser } from "@/lib/actions";
 import { AiUnavailableError, assertAiQuota, generateStructured, QuotaError } from "@/lib/ai/core";
 import type { Json } from "@/lib/supabase/database.types";
 import { WIZARD_COPY } from "./copy";
-import { validateTarget } from "./rules";
+import { normalizeVariants, validateTarget } from "./rules";
 import {
   createTargetInputSchema,
   generateTargetInputSchema,
@@ -70,7 +70,13 @@ export async function generateTargetAction(input: unknown): Promise<ActionResult
       if (!check.ok) return { data: null, error: WIZARD_COPY.errors.refine };
     }
 
-    return { data: proposal, error: null };
+    return {
+      data: {
+        ...proposal,
+        acceptedVariants: normalizeVariants(proposal.answer, proposal.acceptedVariants),
+      },
+      error: null,
+    };
   } catch (err) {
     if (err instanceof AiUnavailableError) {
       return { data: null, error: WIZARD_COPY.errors.generate };

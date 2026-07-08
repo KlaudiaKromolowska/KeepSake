@@ -91,6 +91,16 @@ describe("generateTargetAction", () => {
     expect(generateStructured).toHaveBeenCalledTimes(1);
   });
 
+  it("strips variants that duplicate the answer or each other (untrusted model output)", async () => {
+    generateStructuredMock.mockResolvedValueOnce({
+      ...proposal,
+      acceptedVariants: ["Sarah", "Sara", "sara", " SARA "],
+    });
+    const res = await generateTargetAction({ description: "My daughter Sarah visits on Sundays." });
+    expect(res.error).toBeNull();
+    expect(res.data?.acceptedVariants).toEqual(["Sara"]);
+  });
+
   it("does a single corrective re-ask when the first proposal breaks the rules", async () => {
     generateStructuredMock.mockResolvedValueOnce(badProposal).mockResolvedValueOnce(proposal);
     const res = await generateTargetAction({ description: "My daughter Sarah visits on Sundays." });

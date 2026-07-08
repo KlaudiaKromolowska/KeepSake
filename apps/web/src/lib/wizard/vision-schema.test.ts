@@ -42,6 +42,24 @@ describe("path validation — allowlist regex + canonical-path confinement", () 
     expect(res.success).toBe(false);
   });
 
+  it("accepts an optional memory target (question + answer only)", () => {
+    const res = qaPhotoInputSchema.safeParse({
+      imagePath: "/images/lena.jpg",
+      target: { question: "What is your granddaughter's name?", answer: "Lena" },
+    });
+    expect(res.success).toBe(true);
+  });
+
+  it.each([
+    ["extra target field", { question: "Q?", answer: "A", rationale: "leaky" }],
+    ["empty question", { question: "", answer: "Lena" }],
+    ["overlong answer", { question: "Q?", answer: "a".repeat(121) }],
+  ])("rejects a target with %s (data minimization)", (_label, target) => {
+    expect(qaPhotoInputSchema.safeParse({ imagePath: "/images/lena.jpg", target }).success).toBe(
+      false,
+    );
+  });
+
   it("resolves inside the images directory, not merely the public directory", () => {
     const abs = resolveImagePath("/images/lena.jpg");
     expect(abs).toMatch(/[/\\]public[/\\]images[/\\]lena\.jpg$/);

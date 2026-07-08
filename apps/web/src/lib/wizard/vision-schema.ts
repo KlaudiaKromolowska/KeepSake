@@ -37,9 +37,19 @@ export function resolveImagePath(imagePath: string): string | null {
   return abs.startsWith(IMAGES_DIR + sep) ? abs : null;
 }
 
+/** Optional memory-target context (question + answer ONLY — data minimization) so the vision
+ * call can point crop advice at the subject the target is about. Bounds match the wizard
+ * proposal schema. */
 export const qaPhotoInputSchema = z
   .object({
     imagePath: z.string().regex(IMAGE_PATH_RE),
+    target: z
+      .object({
+        question: z.string().trim().min(1).max(300),
+        answer: z.string().trim().min(1).max(120),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 

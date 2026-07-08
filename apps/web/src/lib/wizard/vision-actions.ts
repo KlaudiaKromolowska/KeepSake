@@ -58,7 +58,7 @@ export async function qaPhotoAction(input: unknown): Promise<ActionResult<PhotoQ
           type: "image",
           source: { type: "base64", media_type: mediaTypeFor(parsed.data.imagePath), data: base64 },
         },
-        { type: "text", text: buildVisionUserText(LOCALE) },
+        { type: "text", text: buildVisionUserText(LOCALE, parsed.data.target) },
       ],
       effort: "medium",
       maxTokens: 2048,

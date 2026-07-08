@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateTarget } from "./rules";
+import { normalizeVariants, validateTarget } from "./rules";
 
 /** A well-formed proposal that passes every rule; tests override one field at a time. */
 const good = {
@@ -100,6 +100,32 @@ describe("validateTarget — answer leakage", () => {
     const r = validateTarget({ question: "Where is PARIS on the map?", answer: "Paris" });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.violations.join(" ")).toMatch(/question already/i);
+  });
+});
+
+describe("normalizeVariants", () => {
+  it("keeps distinct variants unchanged, preserving order", () => {
+    expect(normalizeVariants("Lena", ["Lenka", "Little Lena"])).toEqual(["Lenka", "Little Lena"]);
+  });
+
+  it("drops a variant identical to the answer", () => {
+    expect(normalizeVariants("Lena", ["Lena", "Lenka"])).toEqual(["Lenka"]);
+  });
+
+  it("drops the answer case-insensitively and after trimming", () => {
+    expect(normalizeVariants("Lena", [" lena ", "LENA", "Lenka"])).toEqual(["Lenka"]);
+  });
+
+  it("dedupes case-insensitively, keeping the first spelling", () => {
+    expect(normalizeVariants("Lena", ["Lenka", "lenka", "LENKA"])).toEqual(["Lenka"]);
+  });
+
+  it("drops empty and whitespace-only variants", () => {
+    expect(normalizeVariants("Lena", ["", "  ", "Lenka"])).toEqual(["Lenka"]);
+  });
+
+  it("returns an empty list untouched", () => {
+    expect(normalizeVariants("Lena", [])).toEqual([]);
   });
 });
 

@@ -4,6 +4,8 @@
 // core's fixture loader expects (packages/core/prompts/fixtures.ts + apps/web/src/lib/ai/core.ts):
 // structured kinds (wizard, distractors, vision) write the parsed object; streamed kinds (debrief,
 // rct) write a JSON-encoded string of the raw text. LIVE API calls only — never run in CI.
+// Optional args restrict which kinds are recorded (`pnpm fixtures:record vision`) so a single
+// prompt change never forces re-spending on every kind.
 //
 // vision is recorded only if a seeded photo asset exists (apps/web/public/images/lena.jpg) —
 // skipped with a note otherwise. The rct dataset is built straight from the seeded DB using the
@@ -184,12 +186,22 @@ async function recordGrade(admin: Admin, patientId: string): Promise<void> {
 
 // --- vision (skip if no seeded photo asset) -------------------------------------------------
 
-async function recordVision(): Promise<"recorded" | "skipped"> {
+async function recordVision(admin: Admin, patientId: string): Promise<"recorded" | "skipped"> {
   const candidate = join(WEB_PUBLIC_IMAGES, "lena.jpg");
   if (!existsSync(candidate)) {
     console.error("record-fixtures: vision — skipped (apps/web/public/images/lena.jpg not found)");
     return "skipped";
   }
+  // The live wizard flow sends the proposal's question + answer so crop advice points at the
+  // target's subject — record with the seeded target for parity (undefined if none seeded yet).
+  const { data: target } = await admin
+    .from("targets")
+    .select("question, answer")
+    .eq("patient_id", patientId)
+    .in("status", ["active", "maintenance"])
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
   const imagePath = "/images/lena.jpg";
   const base64 = readFileSync(candidate).toString("base64");
   const result = await generateStructured({
@@ -201,7 +213,7 @@ async function recordVision(): Promise<"recorded" | "skipped"> {
         type: "image",
         source: { type: "base64", media_type: mediaTypeFor(imagePath), data: base64 },
       },
-      { type: "text", text: buildVisionUserText("en") },
+      { type: "text", text: buildVisionUserText("en", target ?? undefined) },
     ],
     effort: "medium",
     maxTokens: 2048,
@@ -402,6 +414,8 @@ async function recordRct(
 
 // --- main -------------------------------------------------------------------------------------
 
+const ALL_KINDS = ["wizard", "distractors", "grade", "vision", "debrief", "rct"];
+
 async function main(): Promise<void> {
   loadWebEnv();
   if (process.env.CLAUDE_FIXTURES === "1") {
@@ -412,15 +426,25 @@ async function main(): Promise<void> {
   }
   requireEnv("ANTHROPIC_API_KEY");
 
+  const args = process.argv.slice(2);
+  const unknown = args.filter((k) => !ALL_KINDS.includes(k));
+  if (unknown.length) {
+    console.error(
+      `record-fixtures: unknown kind(s) ${unknown.join(", ")} — use ${ALL_KINDS.join(", ")}`,
+    );
+    process.exit(1);
+  }
+  const kinds = new Set(args.length ? args : ALL_KINDS);
+
   const admin = supabaseAdmin();
   const patient = await demoPatient(admin);
 
-  await recordWizard();
-  await recordDistractors(admin, patient.id);
-  await recordGrade(admin, patient.id);
-  await recordVision();
-  await recordDebrief(admin, patient.id);
-  await recordRct(admin, patient);
+  if (kinds.has("wizard")) await recordWizard();
+  if (kinds.has("distractors")) await recordDistractors(admin, patient.id);
+  if (kinds.has("grade")) await recordGrade(admin, patient.id);
+  if (kinds.has("vision")) await recordVision(admin, patient.id);
+  if (kinds.has("debrief")) await recordDebrief(admin, patient.id);
+  if (kinds.has("rct")) await recordRct(admin, patient);
 
   console.error("record-fixtures: done — see packages/core/prompts/fixtures/*.json");
 }
