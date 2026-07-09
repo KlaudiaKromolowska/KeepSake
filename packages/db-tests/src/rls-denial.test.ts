@@ -1557,4 +1557,45 @@ describe("RLS: care-home multi-tenant (organizations)", () => {
     const after = await joiner.client.from("patients").select("id").eq("id", orgA.patientId);
     expect(after.data ?? []).toHaveLength(0);
   });
+
+  // ---- abuse prevention: per-user org-creation cap (PR #42 review follow-up) ----
+
+  it("abuse cap: a user can create orgs up to the cap, then the next call is denied and persists nothing", async () => {
+    const ORG_CAP = 10;
+    const capUser = await makeUser("capuser");
+
+    for (let i = 0; i < ORG_CAP; i++) {
+      const { data: orgId, error } = await capUser.client.rpc("create_organization", {
+        p_name: `Cap org ${i}`,
+      });
+      expect(error).toBeNull();
+      expect(orgId).toBeTruthy();
+      createdOrgIds.push(orgId as string);
+    }
+
+    // Positive control still holds at the boundary: exactly ORG_CAP admin memberships exist.
+    const memberships = await admin
+      .from("organization_members")
+      .select("org_id")
+      .eq("user_id", capUser.id)
+      .eq("role", "admin");
+    expect(memberships.data ?? []).toHaveLength(ORG_CAP);
+
+    // The (cap + 1)-th call is denied — a generic, non-enumerating error — and nothing persists.
+    const overCap = await capUser.client.rpc("create_organization", {
+      p_name: "one too many",
+    });
+    expect(overCap.error).not.toBeNull();
+    expect(overCap.data).toBeNull();
+
+    const membershipsAfter = await admin
+      .from("organization_members")
+      .select("org_id")
+      .eq("user_id", capUser.id)
+      .eq("role", "admin");
+    expect(membershipsAfter.data ?? []).toHaveLength(ORG_CAP);
+
+    const leaked = await admin.from("organizations").select("id").eq("name", "one too many");
+    expect(leaked.data ?? []).toHaveLength(0);
+  }, 30000);
 });
