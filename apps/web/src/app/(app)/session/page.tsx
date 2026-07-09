@@ -67,7 +67,8 @@ export default async function SessionPage() {
   // Claude call never blocks or breaks the kiosk flow — any failure is swallowed and SessionView
   // falls back (static distractor list / free-recall probe). Hard 3s budget each; run concurrently
   // so the second never adds to the first's latency. `recognitionOptions` self-gates to
-  // maintenance/booster targets (returns null with no AI spend for acquisition, incl. the demo).
+  // post-mastery BOOSTER targets only (null with no AI spend for acquisition + between, incl. the
+  // demo) — recognition must never replace the free-recall probe that earns mastery.
   const budget = <T,>(p: Promise<{ data: T | null }>): Promise<{ data: T | null }> =>
     Promise.race([
       p,

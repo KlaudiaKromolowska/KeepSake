@@ -14,7 +14,7 @@ const luresSchema = z.object({ lures: z.array(z.string()) });
  * recognition is a post-mastery maintenance format only — never acquisition, never `between` mode
  * (still earning free-recall mastery) — so any other mode returns `null` BEFORE any AI spend and the
  * kiosk falls back to the free-recall probe. Like the distractor
- * fetch, this is invisible plumbing — ANY failure (no target, not in maintenance, quota exceeded, AI
+ * fetch, this is invisible plumbing — ANY failure (no target, not in booster mode, quota exceeded, AI
  * unavailable, or a code-side validation reject) resolves to `{ data: null, error: null }` so the
  * caller silently degrades to free recall. Only call after an authenticated request.
  */
