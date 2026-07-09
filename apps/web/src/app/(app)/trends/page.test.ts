@@ -6,6 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // is actually wired and keeps the fake query surface small.
 const { requireUserMock } = vi.hoisted(() => ({ requireUserMock: vi.fn() }));
 vi.mock("@/lib/actions", () => ({ requireUser: requireUserMock }));
+// The page resolves the ACTIVE patient (multi-patient) via a cookie; with no cookie it falls back
+// to the caregiver's oldest owned patient. Stub next/headers so that fallback path runs.
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => undefined }),
+}));
 
 import TrendsPage from "./page";
 
@@ -26,8 +31,14 @@ interface FakeOpts {
 
 function fakeSupabase(opts: FakeOpts) {
   const patient = opts.patient ?? {
-    data: { id: "p1", timezone: "Europe/Warsaw", etiology: "alzheimers" },
+    data: { id: "p1", display_name: "Maria", timezone: "Europe/Warsaw", etiology: "alzheimers" },
     error: null,
+  };
+  // listOwnedPatients (the active-patient resolver) reads the caregiver's patients as a LIST, so
+  // the patients query resolves to an array; a single object becomes a one-element roster.
+  const patientsResult = {
+    data: patient.data == null ? patient.data : [patient.data],
+    error: patient.error,
   };
   const defaults: Record<string, { data: unknown; error: unknown }> = {
     targets: { data: [], error: null },
@@ -36,7 +47,7 @@ function fakeSupabase(opts: FakeOpts) {
   };
   const tables = { ...defaults, ...opts.tables };
   return {
-    from: (table: string) => (table === "patients" ? query(patient) : query(tables[table])),
+    from: (table: string) => (table === "patients" ? query(patientsResult) : query(tables[table])),
   };
 }
 
@@ -65,12 +76,14 @@ describe("TrendsPage — empty/error states", () => {
     expect(html).toContain("Create a memory target");
   });
 
-  it("shows the unavailable message on a patient read error", async () => {
+  it("degrades to the no-target state on a patient read error", async () => {
+    // The active-patient resolver treats a patients read failure as "no patient" (best-effort,
+    // like loadQueue) rather than surfacing a raw error — the caregiver sees the empty state.
     requireUserMock.mockResolvedValue({
       user: { id: "u1" },
       supabase: fakeSupabase({ patient: { data: null, error: { message: "boom" } } }),
     });
-    expect(await renderPage()).toContain("Trends aren&#x27;t available right now");
+    expect(await renderPage()).toContain("Create a memory target");
   });
 
   it("shows the unavailable message on a trials read error", async () => {

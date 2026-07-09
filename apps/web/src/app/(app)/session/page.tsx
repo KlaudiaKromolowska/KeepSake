@@ -19,10 +19,10 @@ const NO_TARGET_SECTION =
  * only the target it opens on is now queue-aware.
  */
 export default async function SessionPage() {
-  const { supabase } = await requireUser();
+  const { user, supabase } = await requireUser();
 
   const now = Date.now();
-  const queue = await loadQueue(supabase);
+  const queue = await loadQueue(supabase, user.id);
   const selectedId = queue ? selectSessionTarget(queue.targets, now, queue.patient.timezone) : null;
   const target = queue?.targets.find((t) => t.id === selectedId) ?? null;
 

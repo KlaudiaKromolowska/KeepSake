@@ -732,3 +732,172 @@ describe("ai_calls_today() global counter", () => {
     expect(bSeesA.data ?? []).toHaveLength(0);
   });
 });
+
+// Read-only clinician view (clinician_patients) — the V1 "discuss with your doctor" surface. A
+// clinician is a third auth user linked to graphA's patient by caregiver A (via the link_clinician
+// definer function). This block proves the whole isolation contract:
+//   * a LINKED clinician can READ the shared patient's clinical rows (positive control),
+//   * cannot read an UNLINKED patient's rows (clinician <-> unlinked-patient denial),
+//   * cannot WRITE anything on the shared patient — read-only is structural (role gating),
+//   * cannot self-serve a grant (only the owning caregiver can), and the definer function refuses
+//     a non-owner caregiver and self-links,
+//   * the grant is visible to the owning caregiver and the clinician, never to caregiver B, and a
+//     revoke immediately removes the clinician's read access.
+describe("RLS: read-only clinician view (clinician_patients)", () => {
+  let clinicianId: string;
+  let clinicianEmail: string;
+  let clinicianClient: SupabaseClient;
+
+  // Clinical tables reachable through a clinician grant, with the column each is keyed on.
+  const sharedTables = [
+    ["patients", "id", (g: Graph) => g.patientId],
+    ["targets", "id", (g: Graph) => g.targetId],
+    ["sessions", "id", (g: Graph) => g.sessionId],
+    ["trials", "id", (g: Graph) => g.trialId],
+    ["target_state", "target_id", (g: Graph) => g.targetId],
+  ] as const;
+
+  beforeAll(async () => {
+    clinicianEmail = `clin-${randomUUID()}@keepsake.test`;
+    const password = `Aa1-${randomUUID()}`;
+    const { data, error } = await admin.auth.admin.createUser({
+      email: clinicianEmail,
+      password,
+      email_confirm: true,
+    });
+    if (error || !data.user) throw new Error(`createUser clinician failed: ${error?.message}`);
+    clinicianId = data.user.id;
+    clinicianClient = await signInClient(clinicianEmail, password);
+
+    // Caregiver A shares A's patient with the clinician via the sanctioned definer RPC.
+    const { error: linkErr } = await clientA.rpc("link_clinician", {
+      p_patient_id: graphA.patientId,
+      p_clinician_email: clinicianEmail,
+    });
+    if (linkErr) throw new Error(`link_clinician failed: ${linkErr.message}`);
+  }, 30000);
+
+  afterAll(async () => {
+    // Deleting the clinician user cascades their clinician_patients grants away.
+    if (clinicianId) {
+      try {
+        await admin.auth.admin.deleteUser(clinicianId);
+      } catch (err) {
+        console.warn(
+          `clinician cleanup failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  });
+
+  it("positive control: a linked clinician can READ the shared patient's clinical rows", async () => {
+    for (const [table, col, id] of sharedTables) {
+      const res = await clinicianClient.from(table).select(col).eq(col, id(graphA));
+      expect(res.error).toBeNull();
+      expect(res.data ?? []).toHaveLength(1);
+    }
+  });
+
+  it("denial: a clinician CANNOT read an UNLINKED patient's rows (graphB)", async () => {
+    for (const [table, col, id] of sharedTables) {
+      const res = await clinicianClient.from(table).select(col).eq(col, id(graphB));
+      expect(res.error).toBeNull();
+      expect(res.data ?? []).toHaveLength(0);
+    }
+    // Nor via an unfiltered scan — B's patient must never appear in the clinician's result set.
+    const all = await clinicianClient.from("patients").select("id");
+    const ids = (all.data ?? []).map((r) => (r as { id: string }).id);
+    expect(ids).toContain(graphA.patientId);
+    expect(ids).not.toContain(graphB.patientId);
+  });
+
+  it("role gating: a linked clinician's writes to the shared patient affect 0 rows / are denied", async () => {
+    const upd = await clinicianClient
+      .from("targets")
+      .update({ question: "clinician-edit" })
+      .eq("id", graphA.targetId)
+      .select("id");
+    expect(upd.data ?? []).toHaveLength(0);
+
+    const del = await clinicianClient
+      .from("targets")
+      .delete()
+      .eq("id", graphA.targetId)
+      .select("id");
+    expect(del.data ?? []).toHaveLength(0);
+
+    // Inserting a trial into the shared session is a WITH CHECK violation (no clinician insert
+    // policy exists) — 42501, and nothing persists.
+    const ins = await clinicianClient.from("trials").insert({
+      session_id: graphA.sessionId,
+      target_id: graphA.targetId,
+      interval_sec: 10,
+      outcome: "recall",
+      at: new Date().toISOString(),
+    });
+    expect(ins.error).not.toBeNull();
+    expect(ins.error?.code).toBe("42501");
+
+    // The shared target is untouched.
+    const check = await admin.from("targets").select("question").eq("id", graphA.targetId).single();
+    expect(check.data?.question).not.toBe("clinician-edit");
+  });
+
+  it("a clinician cannot self-serve a grant (RLS insert requires the caregiver's ownership)", async () => {
+    const marker = { clinician_id: clinicianId, patient_id: graphB.patientId };
+    const { error } = await clinicianClient.from("clinician_patients").insert(marker);
+    expect(error).not.toBeNull();
+    expect(error?.code).toBe("42501");
+    const persisted = await admin.from("clinician_patients").select("patient_id").match(marker);
+    expect(persisted.data ?? []).toHaveLength(0);
+  });
+
+  it("link_clinician refuses a caregiver who does not own the patient", async () => {
+    const res = await clientB.rpc("link_clinician", {
+      p_patient_id: graphA.patientId,
+      p_clinician_email: clinicianEmail,
+    });
+    expect(res.error).not.toBeNull();
+    expect(res.error?.code).toBe("42501");
+  });
+
+  it("link_clinician refuses self-linking", async () => {
+    const res = await clientA.rpc("link_clinician", {
+      p_patient_id: graphA.patientId,
+      p_clinician_email: graphA.email,
+    });
+    expect(res.error).not.toBeNull();
+  });
+
+  it("the grant is visible to the owning caregiver and clinician, never to caregiver B", async () => {
+    const aSees = await clientA
+      .from("clinician_patients")
+      .select("clinician_id")
+      .eq("patient_id", graphA.patientId);
+    expect(aSees.data ?? []).toHaveLength(1);
+
+    const bSees = await clientB
+      .from("clinician_patients")
+      .select("clinician_id")
+      .eq("patient_id", graphA.patientId);
+    expect(bSees.data ?? []).toHaveLength(0);
+
+    const cSees = await clinicianClient
+      .from("clinician_patients")
+      .select("patient_id")
+      .eq("clinician_id", clinicianId);
+    expect(cSees.data ?? []).toHaveLength(1);
+  });
+
+  it("revoking the grant immediately removes the clinician's read access", async () => {
+    const del = await clientA
+      .from("clinician_patients")
+      .delete()
+      .match({ clinician_id: clinicianId, patient_id: graphA.patientId })
+      .select("patient_id");
+    expect(del.data ?? []).toHaveLength(1);
+
+    const after = await clinicianClient.from("patients").select("id").eq("id", graphA.patientId);
+    expect(after.data ?? []).toHaveLength(0);
+  });
+});
