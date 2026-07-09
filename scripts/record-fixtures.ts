@@ -286,6 +286,26 @@ async function recordRct(
   console.error("record-fixtures: rct — recorded");
 }
 
+// --- coach (boundaried caregiver coaching copilot, PLAN §11) -----------------------------------
+
+async function recordCoach(): Promise<void> {
+  const { buildCoachUserMessage, COACH_SYSTEM } = await import("@keepsake/core/prompts/coach");
+  const { coachReplySchema } = await import("@/lib/coach/schema");
+  // No patient data by design — the coach only sees the caregiver's own message (data minimization).
+  const result = await generateStructured({
+    kind: "coach",
+    schema: coachReplySchema,
+    system: COACH_SYSTEM,
+    user: buildCoachUserMessage({
+      locale: "en",
+      turns: [{ role: "user", content: "She got frustrated today — should we stop for now?" }],
+    }),
+    maxTokens: 1024,
+  });
+  writeStructuredFixture("coach", result);
+  console.error("record-fixtures: coach — recorded");
+}
+
 // --- etiology (extended-thinking format recommendation) ----------------------------------------
 
 async function recordEtiology(
@@ -331,7 +351,16 @@ async function recordEtiology(
 
 // --- main -------------------------------------------------------------------------------------
 
-const ALL_KINDS = ["wizard", "distractors", "grade", "vision", "debrief", "rct", "etiology"];
+const ALL_KINDS = [
+  "wizard",
+  "distractors",
+  "grade",
+  "vision",
+  "debrief",
+  "rct",
+  "etiology",
+  "coach",
+];
 
 async function main(): Promise<void> {
   loadWebEnv();
@@ -363,6 +392,7 @@ async function main(): Promise<void> {
   if (kinds.has("debrief")) await recordDebrief(admin, patient.id);
   if (kinds.has("rct")) await recordRct(admin, patient);
   if (kinds.has("etiology")) await recordEtiology(admin, patient);
+  if (kinds.has("coach")) await recordCoach();
 
   console.error("record-fixtures: done — see packages/core/prompts/fixtures/*.json");
 }

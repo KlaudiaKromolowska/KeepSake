@@ -2,6 +2,7 @@ import Link from "next/link";
 import { SiteFooter } from "@/components/site-footer";
 import { requireUser } from "@/lib/actions";
 import { signOut } from "@/lib/auth/actions";
+import { COACH_COPY } from "@/lib/coach/copy";
 import { ETIOLOGY_COPY } from "@/lib/etiology/copy";
 import { PROGRESS_COPY } from "@/lib/progress/copy";
 import { REVIEW_COPY } from "@/lib/review/copy";
@@ -102,6 +103,14 @@ export default async function DashboardPage() {
         >
           <span className="text-2xl font-semibold">{ETIOLOGY_COPY.title}</span>
           <span className="text-lg text-zinc-600">{ETIOLOGY_COPY.intro}</span>
+        </Link>
+
+        <Link
+          href="/coach"
+          className="flex min-h-[64px] w-full max-w-xl flex-col items-center gap-2 rounded-2xl border-2 border-zinc-900 bg-white px-8 py-6 text-center text-zinc-900 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+        >
+          <span className="text-2xl font-semibold">{COACH_COPY.title}</span>
+          <span className="text-lg text-zinc-600">{COACH_COPY.intro}</span>
         </Link>
 
         <form action={signOut}>
