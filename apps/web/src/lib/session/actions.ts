@@ -7,6 +7,7 @@ import {
   defaultsForEtiology,
   onBoosterOutcome,
   onSessionStartOutcome,
+  resolvedStartProbeOutcome,
   resumeSession,
   type ScheduleState,
   type SessionState,
@@ -382,14 +383,18 @@ export async function endSessionAction(input: unknown): Promise<ActionResult<nul
   if (snapshot.endReason === "mastered") {
     sched = afterMastery(at, config); // one-time handoff; between-mode result is discarded (§5)
   } else {
-    if (existing && startProbe && snapshot.trials.length > 0) {
+    // Resolve, not just read, the start probe's outcome: a terminal double-unclear is recorded as
+    // `{ outcome: "unclear", corrected: true }` (PLAN §4.2 v4 — two consecutive unclears = a
+    // confirmed miss), which `resolvedStartProbeOutcome` collapses to `"miss"` so the schedule
+    // actually shrinks instead of silently no-op'ing on the raw `"unclear"` reading.
+    const resolvedOutcome = startProbe ? resolvedStartProbeOutcome(snapshot.trials) : null;
+    if (existing && resolvedOutcome) {
       // Dispatch by the persisted mode: a mastered target runs booster sessions whose cadence
       // grows via `onBoosterOutcome`; a pre-mastery target updates its between-session gap.
-      const outcome = snapshot.trials[0].outcome;
       sched =
         existing.mode === "booster"
-          ? onBoosterOutcome(existing, outcome, at, config).state
-          : onSessionStartOutcome(existing, outcome, at, config).state;
+          ? onBoosterOutcome(existing, resolvedOutcome, at, config).state
+          : onSessionStartOutcome(existing, resolvedOutcome, at, config).state;
     }
     if (!existing && snapshot.endReason === "ceiling") sched = afterCeilingHandoff(at, config);
   }

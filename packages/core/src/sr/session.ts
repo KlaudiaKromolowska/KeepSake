@@ -397,3 +397,32 @@ function handleEndRequested(state: SessionState): SessionState {
 function softCapReached(state: SessionState, at: number, config: SrConfig): boolean {
   return at - state.startedAt >= config.sessionSoftCapSec * 1000;
 }
+
+/**
+ * Resolves what the session-start probe actually decided, for callers (the between/booster
+ * scheduler dispatch in `endSessionAction`) that must not move the schedule on a raw `"unclear"`
+ * outcome yet MUST treat a terminal double-unclear as a miss (PLAN §4.2 v4: two consecutive
+ * unclears = confirmed miss). `handleStartProbe` records that resolution as `{ outcome: "unclear",
+ * corrected: true }` (see `startProbeMiss`) — a shape a naive `trials[0].outcome` read can't tell
+ * apart from a still-open, non-terminal unclear re-probe (`corrected: false`).
+ *
+ * Scans from the front, skipping non-terminal re-probes (`unclear` + `corrected: false`), and
+ * returns the first trial whose signature actually terminates the start probe:
+ * - `recall` (always `corrected: false` for a real start-probe recall)
+ * - `miss` (always `corrected: true`)
+ * - `unclear` + `corrected: true` (the double-unclear conversion) → resolves to `"miss"`
+ *
+ * Any other trial shape (e.g. the guaranteed 0s end-of-session win after the caregiver closes
+ * mid re-probe) means the start probe itself was never resolved — returns `null`, same as the
+ * scheduler's existing `"unclear"` no-op.
+ */
+export function resolvedStartProbeOutcome(trials: readonly TrialRecord[]): Outcome | null {
+  for (const t of trials) {
+    if (t.outcome === "unclear" && !t.corrected) continue; // still-open re-probe, keep scanning
+    if (t.outcome === "recall" && !t.corrected) return "recall";
+    if (t.outcome === "miss" && t.corrected) return "miss";
+    if (t.outcome === "unclear" && t.corrected) return "miss"; // double-unclear → confirmed miss
+    return null; // some other trial shape — the start probe was bailed on, never resolved
+  }
+  return null;
+}
