@@ -1423,6 +1423,27 @@ describe("RLS: care-home multi-tenant (organizations)", () => {
     expect(check.data?.org_id).toBeNull();
   });
 
+  it("escalation: an org ADMIN cannot claim an existing solo caregiver's patient", async () => {
+    // Mirrors the caregiver-side re-tag/bridge test above, from the other direction: there is no org
+    // UPDATE policy on patients at all (§ "no org UPDATE/DELETE policy on the patient ROW"), and
+    // patients_insert_org can only ever INSERT a brand-new row, never target graphA's existing id — so
+    // an org admin has no path to bring a solo patient under their org's org_id.
+    const upd = await orgA.admin.client
+      .from("patients")
+      .update({ org_id: orgA.orgId })
+      .eq("id", graphA.patientId)
+      .select("id");
+    expect(upd.data ?? []).toHaveLength(0);
+
+    const check = await admin
+      .from("patients")
+      .select("org_id, caregiver_id")
+      .eq("id", graphA.patientId)
+      .single();
+    expect(check.data?.org_id).toBeNull();
+    expect(check.data?.caregiver_id).toBe(graphA.userId);
+  });
+
   // ---- membership lifecycle ----
 
   it("lifecycle: an admin can add a member, and that member can leave and loses read access", async () => {

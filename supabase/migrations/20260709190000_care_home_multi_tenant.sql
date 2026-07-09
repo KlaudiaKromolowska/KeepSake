@@ -18,8 +18,9 @@
 --     shared across care homes). To let an org patient be owned by the ORG rather than by any one
 --     staff member (so it survives staff turnover and GDPR-erasure of an individual account), the
 --     previously-NOT-NULL `caregiver_id` is made nullable and an org patient carries
---     `caregiver_id IS NULL, org_id = <org>`. A CHECK keeps every patient owned by at least one of
---     the two (never an orphan invisible to all). Solo and org rows are kept strictly DISJOINT: the
+--     `caregiver_id IS NULL, org_id = <org>`. A CHECK (`num_nonnulls(caregiver_id, org_id) = 1`) keeps
+--     every patient owned by EXACTLY one of the two (never an orphan invisible to all, and never a
+--     bridge row visible to both). Solo and org rows are kept strictly DISJOINT: the
 --     existing caregiver INSERT/UPDATE WITH CHECKs are tightened by ONE conjunct — `org_id IS NULL` —
 --     so the caregiver path only ever produces/edits solo patients and can NEVER inject a patient
 --     into an org (setting org_id via the caregiver policy is denied). This is not a narrowing of
@@ -95,12 +96,14 @@ alter table public.patients alter column caregiver_id drop not null;
 alter table public.patients
   add column org_id uuid references public.organizations (id) on delete set null;
 
--- Every patient is owned by at least one of the two boundaries — never an orphan row that no policy
--- can reach. (In practice the two are mutually exclusive: solo => caregiver_id only, org => org_id
--- only, which is what keeps the existing caregiver policies and the new org policies disjoint.)
+-- Every patient is owned by EXACTLY one of the two boundaries — never an orphan row that no policy
+-- can reach, and never a "bridge" row visible to both a solo caregiver AND an org (which an
+-- at-least-one check would permit if caregiver_id and org_id were ever both set). num_nonnulls(...)
+-- = 1 makes the solo/org disjointness structural rather than merely an emergent property of today's
+-- policies, so it still holds even if a future org-patient-UPDATE policy forgets to re-assert it.
 alter table public.patients
   add constraint patients_owner_present
-  check (caregiver_id is not null or org_id is not null);
+  check (num_nonnulls(caregiver_id, org_id) = 1);
 
 -- Partial index: the vast majority of patients are solo (org_id null), so index only org rows — used
 -- by the org SELECT policy and the org roster listing.
