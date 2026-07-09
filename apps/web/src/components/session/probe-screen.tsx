@@ -2,8 +2,10 @@ import type { Outcome } from "@keepsake/core/sr";
 import Image from "next/image";
 import { useState } from "react";
 import { SESSION_COPY } from "@/lib/session/copy";
+import { outcomeForPick } from "@/lib/session/recognition-rules";
 import { useSpeechProbe } from "@/lib/session/use-speech-probe";
 import { OutcomeButtons } from "./outcome-buttons";
+import { RecognitionChoices } from "./recognition-choices";
 
 /** When set, the speech assist listens during this probe and suggests an outcome. */
 export interface SpeechProbeConfig {
@@ -17,16 +19,21 @@ export function ProbeScreen({
   imageUrl,
   onOutcome,
   speech,
+  recognitionOptions,
 }: {
   question: string;
   answer: string;
   imageUrl: string | null;
   onOutcome: (outcome: Outcome) => void;
   speech?: SpeechProbeConfig;
+  /** Maintenance/booster recognition format: pick one of these; free recall when undefined. */
+  recognitionOptions?: readonly string[];
 }) {
+  const recognition = recognitionOptions !== undefined && recognitionOptions.length > 0;
   const [imageFailed, setImageFailed] = useState(false);
+  // Hooks run unconditionally; the speech assist is disabled in recognition mode (no free recall).
   const assist = useSpeechProbe({
-    enabled: speech !== undefined,
+    enabled: speech !== undefined && !recognition,
     targetId: speech?.targetId ?? "",
     answer,
     aliases: speech?.aliases ?? [],
@@ -49,19 +56,32 @@ export function ProbeScreen({
           onError={() => setImageFailed(true)}
         />
       )}
-      <p className="text-2xl text-zinc-700">{SESSION_COPY.probe.caregiverPrompt}</p>
-      <p className="text-xl text-zinc-700">
-        {SESSION_COPY.probe.answerHint} <strong className="text-zinc-900">{answer}</strong>
-      </p>
-      {assist.status !== "off" && (
-        <p role="status" className="min-h-[1.75rem] text-xl text-zinc-700">
-          {assist.status === "listening" && SESSION_COPY.speech.listening}
-          {assist.status === "checking" && SESSION_COPY.speech.checking}
-          {suggestion === "recall" && SESSION_COPY.speech.heardRecall}
-          {suggestion === "miss" && SESSION_COPY.speech.heardMiss}
-        </p>
+
+      {recognition ? (
+        <>
+          <p className="text-2xl text-zinc-700">{SESSION_COPY.probe.recognitionPrompt}</p>
+          <RecognitionChoices
+            options={recognitionOptions}
+            onPick={(pick) => onOutcome(outcomeForPick(pick, answer))}
+          />
+        </>
+      ) : (
+        <>
+          <p className="text-2xl text-zinc-700">{SESSION_COPY.probe.caregiverPrompt}</p>
+          <p className="text-xl text-zinc-700">
+            {SESSION_COPY.probe.answerHint} <strong className="text-zinc-900">{answer}</strong>
+          </p>
+          {assist.status !== "off" && (
+            <p role="status" className="min-h-[1.75rem] text-xl text-zinc-700">
+              {assist.status === "listening" && SESSION_COPY.speech.listening}
+              {assist.status === "checking" && SESSION_COPY.speech.checking}
+              {suggestion === "recall" && SESSION_COPY.speech.heardRecall}
+              {suggestion === "miss" && SESSION_COPY.speech.heardMiss}
+            </p>
+          )}
+          <OutcomeButtons onOutcome={onOutcome} suggested={suggestion} />
+        </>
       )}
-      <OutcomeButtons onOutcome={onOutcome} suggested={suggestion} />
     </section>
   );
 }

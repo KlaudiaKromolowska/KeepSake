@@ -23,6 +23,20 @@ export function recallCount(trials: readonly TrialRecord[]): number {
   return trials.filter((t) => t.outcome === "recall").length;
 }
 
+/**
+ * Recognition options to show for the current probe, or `undefined` for the free-recall probe.
+ * Recognition is a MAINTENANCE/BOOSTER format only: it is offered ONLY on the session-start probe
+ * (`isStartProbe`) and only when the server produced options (which it does only for a target in a
+ * between/booster schedule). A reopened within-session retraining loop after a maintenance miss has
+ * `isStartProbe === false`, so it reverts to free recall — acquisition is never affected.
+ */
+export function recognitionForProbe(
+  state: SessionState,
+  options: readonly string[] | undefined,
+): readonly string[] | undefined {
+  return state.isStartProbe && options && options.length > 0 ? options : undefined;
+}
+
 /** Engine phase → screen key. Total over `SessionPhase` (exhaustive switch). */
 export function screenForPhase(phase: SessionPhase): Screen {
   switch (phase) {

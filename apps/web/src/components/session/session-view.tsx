@@ -17,7 +17,12 @@ import {
 } from "@/lib/session/actions";
 import { SESSION_COPY } from "@/lib/session/copy";
 import { distractorForTrial } from "@/lib/session/distractors";
-import { attemptSave, recallCount, trialAdded } from "@/lib/session/session-view-logic";
+import {
+  attemptSave,
+  recallCount,
+  recognitionForProbe,
+  trialAdded,
+} from "@/lib/session/session-view-logic";
 import { useSessionRunner } from "@/lib/session/use-session-runner";
 import { ladderRungs } from "@/lib/session/wait-policy";
 import { AffectScreen } from "./affect-prompt";
@@ -43,6 +48,7 @@ export function SessionView({
   question,
   resumeAvailable,
   distractorPrompts,
+  recognitionOptions,
   demoAudio,
   speechEnabled = false,
 }: {
@@ -51,6 +57,9 @@ export function SessionView({
   question: string;
   resumeAvailable: boolean;
   distractorPrompts?: readonly string[];
+  /** V2 recognition-probe options (answer + lures) for a maintenance/booster start probe, or
+   *  undefined when the target is acquiring / generation failed → free-recall probe. */
+  recognitionOptions?: readonly string[];
   demoAudio?: boolean;
   /** NEXT_PUBLIC_SPEECH=1 — V1 speech assist on the probe screen (suggestion only, default off). */
   speechEnabled?: boolean;
@@ -99,6 +108,7 @@ export function SessionView({
         result={result}
         demoSpeed={demoSpeed}
         distractorPrompts={distractorPrompts}
+        recognitionOptions={recognitionOptions}
         demoAudio={demoAudio ?? false}
         speechEnabled={speechEnabled}
       />
@@ -133,12 +143,14 @@ function RunningSession({
   result,
   demoSpeed,
   distractorPrompts,
+  recognitionOptions,
   demoAudio,
   speechEnabled,
 }: {
   result: StartSessionResult;
   demoSpeed: number;
   distractorPrompts?: readonly string[];
+  recognitionOptions?: readonly string[];
   demoAudio: boolean;
   speechEnabled: boolean;
 }) {
@@ -277,15 +289,23 @@ function RunningSession({
           onDone={() => runner.teachDone()}
         />
       )}
-      {state.phase === "awaiting_probe" && (
-        <ProbeScreen
-          question={q}
-          answer={a}
-          imageUrl={img}
-          onOutcome={(o) => runner.probe(o)}
-          {...(speechEnabled ? { speech: { targetId, aliases: target.acceptedVariants } } : {})}
-        />
-      )}
+      {state.phase === "awaiting_probe" &&
+        (() => {
+          // Recognition (maintenance/booster start probe) suppresses the free-recall speech assist.
+          const options = recognitionForProbe(state, recognitionOptions);
+          return (
+            <ProbeScreen
+              question={q}
+              answer={a}
+              imageUrl={img}
+              onOutcome={(o) => runner.probe(o)}
+              {...(options ? { recognitionOptions: options } : {})}
+              {...(speechEnabled && !options
+                ? { speech: { targetId, aliases: target.acceptedVariants } }
+                : {})}
+            />
+          );
+        })()}
       {state.phase === "correcting" && (
         <AnswerScreen
           variant="correction"

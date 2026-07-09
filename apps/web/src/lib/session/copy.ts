@@ -6,6 +6,8 @@ export const SESSION_COPY = {
     heading: "Time to ask",
     caregiverPrompt: "Ask the question, then tap what happened.",
     answerHint: "The answer is",
+    // Recognition (maintenance/booster) probe: the answer sits among the choices, so no hint.
+    recognitionPrompt: "Ask the question, then choose the answer together.",
   },
   outcomes: {
     recall: "Remembered",
