@@ -29,6 +29,16 @@ const nextConfig: NextConfig = {
   // @keepsake/core ships TS source, no build step (PLAN.md §8b)
   transpilePackages: ["@keepsake/core"],
   images: { remotePatterns: supabaseImagePatterns() },
+  experimental: {
+    serverActions: {
+      // Memory-capsule uploads go through a Server Action, whose body parser defaults to ~1 MiB —
+      // that would silently reject the 25 MiB video cap (`MAX_VIDEO_BYTES` in capsules/capsule-file.ts)
+      // before our own validator ever runs. "26mb" (Next parses it as 26 × 1024² = 27,262,976 B) clears
+      // the 25 MiB file with ~1 MiB of multipart/caption overhead headroom. The authoritative per-file
+      // cap stays server-side in `validateCapsuleBytes`; this only widens the transport gate to reach it.
+      bodySizeLimit: "26mb",
+    },
+  },
 };
 
 export default nextConfig;
