@@ -137,6 +137,47 @@ export type Database = {
           },
         ];
       };
+      memory_capsules: {
+        Row: {
+          caption: string | null;
+          created_at: string;
+          created_by: string;
+          id: string;
+          kind: string;
+          patient_id: string;
+          storage_path: string;
+          updated_at: string;
+        };
+        Insert: {
+          caption?: string | null;
+          created_at?: string;
+          created_by: string;
+          id?: string;
+          kind: string;
+          patient_id: string;
+          storage_path: string;
+          updated_at?: string;
+        };
+        Update: {
+          caption?: string | null;
+          created_at?: string;
+          created_by?: string;
+          id?: string;
+          kind?: string;
+          patient_id?: string;
+          storage_path?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "memory_capsules_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       patients: {
         Row: {
           caregiver_id: string;

@@ -4,6 +4,7 @@ import type { SessionEvent, SessionState } from "@keepsake/core/sr";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNarration } from "@/lib/audio/use-narration";
+import { type Capsule, isRewardableRecall, selectCapsule } from "@/lib/capsules/reward";
 import { useOfflineQueue } from "@/lib/offline/use-offline-queue";
 import {
   annotateSessionAction,
@@ -21,6 +22,7 @@ import { useSessionRunner } from "@/lib/session/use-session-runner";
 import { ladderRungs } from "@/lib/session/wait-policy";
 import { AffectScreen } from "./affect-prompt";
 import { AnswerScreen } from "./answer-screen";
+import { CapsuleReward } from "./capsule-reward";
 import { DistractorCard } from "./distractor-card";
 import { EndScreen } from "./end-screen";
 import { NarrationToggle } from "./narration-toggle";
@@ -150,10 +152,33 @@ function RunningSession({
   // failure, so a caregiver never silently loses a recorded outcome to flaky care-home Wi-Fi.
   const offlineQueue = useOfflineQueue();
 
+  // Memory-capsule reward (PLAN §12 V2): the capsule to show as a warm reward on a genuine recall,
+  // resolved (signed) at session start. Purely a UI overlay — it never touches the runner/timer, so
+  // it cannot disrupt progression. `rewardCountRef` drives deterministic rotation through the set.
+  const capsules = result.capsules;
+  const [reward, setReward] = useState<Capsule | null>(null);
+  const rewardCountRef = useRef(0);
+
   const onChange = useCallback(
     (state: SessionState, event: SessionEvent) => {
       const prev = prevStateRef.current;
       prevStateRef.current = state;
+
+      // Reward AFTER the outcome is recorded, between trials. Only a genuine recall earns one
+      // (never a miss/unclear/correction repeat/screening — `isRewardableRecall`). Clear it the
+      // moment the engine reaches the next probe so it never covers a probe screen. Both are pure
+      // UI state changes: the SR engine and the interval timer run untouched underneath.
+      if (capsules.length > 0) {
+        if (isRewardableRecall(prev, state)) {
+          const picked = selectCapsule(capsules, rewardCountRef.current);
+          if (picked) {
+            rewardCountRef.current += 1;
+            setReward(picked);
+          }
+        } else if (state.phase === "awaiting_probe") {
+          setReward(null);
+        }
+      }
 
       // Interval overrides are best-effort provenance — never queued (a re-fire would duplicate
       // the annotation). Trials and the session close are queued so a save failure can be retried.
@@ -198,7 +223,7 @@ function RunningSession({
         }
       })();
     },
-    [sessionId, targetId, offlineQueue],
+    [sessionId, targetId, offlineQueue, capsules],
   );
 
   const handle = useSessionRunner(result.state, config, demoSpeed, onChange);
@@ -308,6 +333,11 @@ function RunningSession({
       {state.phase !== "ended" && (
         <SessionFooter sessionId={sessionId} onEnd={() => runner.endRequested()} />
       )}
+
+      {/* Warm reward overlay — purely presentational, on top of the current screen. It never mounts
+          the engine/timer, so dismissing it (tap or auto) can't advance or stall the SR runner; the
+          onChange handler already clears it the moment the engine reaches the next probe. */}
+      {reward && <CapsuleReward capsule={reward} onDismiss={() => setReward(null)} />}
     </div>
   );
 }

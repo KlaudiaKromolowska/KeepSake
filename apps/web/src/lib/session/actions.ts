@@ -16,6 +16,8 @@ import {
 import type { z } from "zod";
 import type { ActionResult } from "@/lib/actions";
 import { failAction, requireUser } from "@/lib/actions";
+import { resolvePatientCapsules } from "@/lib/capsules/resolve";
+import type { Capsule } from "@/lib/capsules/reward";
 import { srDefaultsForPatient } from "@/lib/sr/config";
 import type { Json, Tables, TablesInsert } from "@/lib/supabase/database.types";
 import { PRACTICABLE_STATUSES } from "@/lib/targets/queue";
@@ -45,6 +47,9 @@ export interface StartSessionResult {
   target: SessionTarget;
   config: ReturnType<typeof srDefaultsForPatient>["config"];
   resumed: boolean;
+  /** Memory capsules (PLAN §12 V2) for this patient, signed at session start. Empty = no reward
+   *  (graceful absence); a resolution/signing failure also yields [] so the session never breaks. */
+  capsules: Capsule[];
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -167,6 +172,10 @@ export async function startSessionAction(
     imageUrl: await resolveTargetImageUrl(supabase, user.id, target.photo_path, target.image_url),
     acceptedVariants: aliasesFromJson(target.accepted_variants),
   };
+  // Resolve the patient's capsules once (signed) for the whole session — the kiosk shows one as a
+  // warm reward on a genuine recall. Always [] on any failure (graceful absence): a missing reward
+  // must never block a session start. RLS-scoped to the caller's own patient.
+  const capsules = await resolvePatientCapsules(supabase, user.id, target.patient_id);
 
   const { data: open, error: openErr } = await supabase
     .from("sessions")
@@ -199,7 +208,14 @@ export async function startSessionAction(
         if (error)
           return failAction("startSession: resume", error, "Could not resume the session.");
         return {
-          data: { sessionId: open.id, state, target: sessionTarget, config, resumed: true },
+          data: {
+            sessionId: open.id,
+            state,
+            target: sessionTarget,
+            config,
+            resumed: true,
+            capsules,
+          },
           error: null,
         };
       }
@@ -246,7 +262,14 @@ export async function startSessionAction(
   }
 
   return {
-    data: { sessionId: inserted.id, state, target: sessionTarget, config, resumed: false },
+    data: {
+      sessionId: inserted.id,
+      state,
+      target: sessionTarget,
+      config,
+      resumed: false,
+      capsules,
+    },
     error: null,
   };
 }
