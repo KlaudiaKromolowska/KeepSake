@@ -14,7 +14,15 @@ import type { z } from "zod";
 import type { Database } from "@/lib/supabase/database.types";
 import { STREAM_JSON_SENTINEL } from "./stream-sentinel";
 
-export type AiKind = "wizard" | "vision" | "debrief" | "distractors" | "rct" | "grade" | "etiology";
+export type AiKind =
+  | "wizard"
+  | "vision"
+  | "debrief"
+  | "distractors"
+  | "rct"
+  | "grade"
+  | "etiology"
+  | "coach";
 
 /** Per-user rolling-hour and global rolling-day caps. Public repo + demo login = credit-drain risk. */
 export const AI_USER_HOURLY_LIMIT = 20;
