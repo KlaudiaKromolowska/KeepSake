@@ -3,6 +3,7 @@ import { SessionView } from "@/components/session/session-view";
 import { requireUser } from "@/lib/actions";
 import { SESSION_COPY } from "@/lib/session/copy";
 import { personalizedDistractorsAction } from "@/lib/session/distractor-actions";
+import { recognitionOptionsAction } from "@/lib/session/recognition-actions";
 import { loadQueue } from "@/lib/targets/load";
 import { selectSessionTarget } from "@/lib/targets/queue";
 
@@ -62,19 +63,30 @@ export default async function SessionPage() {
   // V1 speech assist — default OFF so the demo/film flow is byte-identical without the flag.
   const speechEnabled = process.env.NEXT_PUBLIC_SPEECH === "1";
 
-  // Fetched once per page load (not per session/trial) so a slow or failing Claude call never
-  // blocks or breaks the kiosk flow — any failure here is swallowed and SessionView falls back to
-  // the static distractor list. Hard 3s budget: the live call took 3–17s in gate testing, and the
-  // kiosk page must never feel broken while a nice-to-have personalization loads.
+  // Both AI extras are fetched once per page load (not per session/trial) so a slow or failing
+  // Claude call never blocks or breaks the kiosk flow — any failure is swallowed and SessionView
+  // falls back (static distractor list / free-recall probe). Hard 3s budget each; run concurrently
+  // so the second never adds to the first's latency. `recognitionOptions` self-gates to
+  // post-mastery BOOSTER targets only (null with no AI spend for acquisition + between, incl. the
+  // demo) — recognition must never replace the free-recall probe that earns mastery.
+  const budget = <T,>(p: Promise<{ data: T | null }>): Promise<{ data: T | null }> =>
+    Promise.race([
+      p,
+      new Promise<{ data: null }>((r) => setTimeout(() => r({ data: null }), 3_000)),
+    ]);
+
   let distractorPrompts: string[] | undefined;
+  let recognitionOptions: string[] | undefined;
   try {
-    const timeout = new Promise<{ data: null }>((resolve) =>
-      setTimeout(() => resolve({ data: null }), 3_000),
-    );
-    const { data } = await Promise.race([personalizedDistractorsAction(target.id), timeout]);
-    if (data) distractorPrompts = data;
+    const [distractors, recognition] = await Promise.all([
+      budget(personalizedDistractorsAction(target.id)),
+      budget(recognitionOptionsAction(target.id)),
+    ]);
+    if (distractors.data) distractorPrompts = distractors.data;
+    if (recognition.data) recognitionOptions = recognition.data;
   } catch {
     distractorPrompts = undefined;
+    recognitionOptions = undefined;
   }
 
   return (
@@ -85,6 +97,7 @@ export default async function SessionPage() {
         question={target.question}
         resumeAvailable={resumeAvailable}
         distractorPrompts={distractorPrompts}
+        recognitionOptions={recognitionOptions}
         demoAudio={process.env.DEMO_MODE === "1"}
         speechEnabled={speechEnabled}
       />

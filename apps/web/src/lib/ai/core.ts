@@ -19,6 +19,7 @@ export type AiKind =
   | "vision"
   | "debrief"
   | "distractors"
+  | "recognition"
   | "rct"
   | "grade"
   | "etiology"

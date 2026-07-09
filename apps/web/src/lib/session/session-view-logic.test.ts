@@ -1,7 +1,13 @@
 import type { SessionState } from "@keepsake/core/sr";
 import { describe, expect, it } from "vitest";
 import type { ActionResult } from "@/lib/actions";
-import { attemptSave, recallCount, screenForPhase, trialAdded } from "./session-view-logic";
+import {
+  attemptSave,
+  recallCount,
+  recognitionForProbe,
+  screenForPhase,
+  trialAdded,
+} from "./session-view-logic";
 
 /** Minimal SessionState stub — only the fields these pure helpers read. */
 function state(overrides: Partial<SessionState> = {}): SessionState {
@@ -86,6 +92,23 @@ describe("attemptSave", () => {
       throw new Error("network drop");
     };
     await expect(attemptSave(fn)).resolves.toBe(false);
+  });
+});
+
+describe("recognitionForProbe", () => {
+  const options = ["David", "Michael", "Peter", "John"];
+
+  it("offers recognition options on the maintenance/booster start probe", () => {
+    expect(recognitionForProbe(state({ isStartProbe: true }), options)).toBe(options);
+  });
+
+  it("reverts to free recall on a reopened within-session loop (isStartProbe false)", () => {
+    expect(recognitionForProbe(state({ isStartProbe: false }), options)).toBeUndefined();
+  });
+
+  it("reverts to free recall when the server produced no options (acquisition / fallback)", () => {
+    expect(recognitionForProbe(state({ isStartProbe: true }), undefined)).toBeUndefined();
+    expect(recognitionForProbe(state({ isStartProbe: true }), [])).toBeUndefined();
   });
 });
 
