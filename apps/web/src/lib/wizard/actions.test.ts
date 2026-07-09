@@ -28,6 +28,20 @@ vi.mock("@/lib/actions", async (orig) => {
   return { ...actual, requireUser: requireUserMock };
 });
 
+// --- Mock next/headers cookies: resolveActivePatient reads the active-patient cookie from here.
+const { cookiesMock, setActiveCookie } = vi.hoisted(() => {
+  let active: string | undefined;
+  return {
+    cookiesMock: vi.fn(async () => ({
+      get: (_name: string) => (active ? { value: active } : undefined),
+    })),
+    setActiveCookie: (v: string | undefined) => {
+      active = v;
+    },
+  };
+});
+vi.mock("next/headers", () => ({ cookies: cookiesMock }));
+
 import { generateStructured } from "@/lib/ai/core";
 import { createTargetAction, generateTargetAction } from "./actions";
 
@@ -51,16 +65,26 @@ const badProposal: WizardProposal = {
   answer: "Sarah",
 };
 
-function fakeSupabase() {
+/**
+ * Fake RLS client. `patients` mirrors listOwnedPatients' query shape (`select().eq().order()`
+ * resolving to an ARRAY, oldest first) so resolveActivePatient runs for real against it; `targets`
+ * captures the insert payload. Defaults to a single patient `p1` (the pre-multi-patient world).
+ */
+function fakeSupabase(patients: { id: string }[] = [{ id: "p1" }]) {
+  const rows = patients.map((p) => ({
+    display_name: "Pat",
+    timezone: "UTC",
+    etiology: "alzheimers",
+    ...p,
+  }));
   const insert = vi.fn((_payload: Record<string, unknown>) => ({
     select: vi.fn(() => ({ single: vi.fn(async () => ({ data: { id: "t1" }, error: null })) })),
   }));
-  const patientSingle = vi.fn(async () => ({ data: { id: "p1" }, error: null }));
   const from = vi.fn((table: string) => {
     if (table === "patients") {
       return {
         select: vi.fn(() => ({
-          order: vi.fn(() => ({ limit: vi.fn(() => ({ maybeSingle: patientSingle })) })),
+          eq: vi.fn(() => ({ order: vi.fn(async () => ({ data: rows, error: null })) })),
         })),
       };
     }
@@ -71,6 +95,7 @@ function fakeSupabase() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  setActiveCookie(undefined);
   requireUserMock.mockResolvedValue({ user: { id: "u1" }, supabase: fakeSupabase() });
   assertAiQuotaMock.mockResolvedValue(undefined);
 });
@@ -193,5 +218,37 @@ describe("createTargetAction", () => {
     await createTargetAction(baseInput);
 
     expect(sb.insert.mock.calls[0][0]).toMatchObject({ photo_path: null });
+  });
+
+  it("attaches the target to the ACTIVE (cookie-selected) patient, not the oldest", async () => {
+    // Two owned patients, oldest first; the caregiver switched to the NEWER one via the cookie.
+    const sb = fakeSupabase([{ id: "p_old" }, { id: "p_new" }]);
+    setActiveCookie("p_new");
+    requireUserMock.mockResolvedValue({ user: { id: "u1" }, supabase: sb });
+
+    const res = await createTargetAction(baseInput);
+
+    expect(res.error).toBeNull();
+    expect(sb.insert.mock.calls[0][0]).toMatchObject({ patient_id: "p_new" });
+  });
+
+  it("falls back to the oldest owned patient when no active-patient cookie is set", async () => {
+    const sb = fakeSupabase([{ id: "p_old" }, { id: "p_new" }]);
+    requireUserMock.mockResolvedValue({ user: { id: "u1" }, supabase: sb });
+
+    await createTargetAction(baseInput);
+
+    expect(sb.insert.mock.calls[0][0]).toMatchObject({ patient_id: "p_old" });
+  });
+
+  it("returns the no-patient error when the caregiver owns no patients", async () => {
+    const sb = fakeSupabase([]);
+    requireUserMock.mockResolvedValue({ user: { id: "u1" }, supabase: sb });
+
+    const res = await createTargetAction(baseInput);
+
+    expect(res.data).toBeNull();
+    expect(res.error).not.toBeNull();
+    expect(sb.insert).not.toHaveBeenCalled();
   });
 });

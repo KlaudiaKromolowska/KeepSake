@@ -2,6 +2,7 @@ import { buildEtiologyUserMessage, ETIOLOGY_SYSTEM } from "@keepsake/core/prompt
 import type { Etiology } from "@keepsake/core/sr";
 import { assertAiQuota, QuotaError, streamThinkingJson } from "@/lib/ai/core";
 import { etiologyRecSchema, reconcileEtiologyRec } from "@/lib/etiology/schema";
+import { resolveActivePatient } from "@/lib/patients/active";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -33,14 +34,9 @@ export async function POST(): Promise<Response> {
     return jsonError("The reasoning isn't available right now.", 503);
   }
 
-  // RLS scopes these reads to the caller's own patient/target.
-  const { data: patient, error: patientErr } = await supabase
-    .from("patients")
-    .select("id, etiology")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (patientErr) return jsonError("The reasoning isn't available right now.", 503);
+  // RLS scopes these reads to the caller's own patient/target. Resolve the ACTIVE (cookie-selected)
+  // patient — not the oldest — so a multi-patient caregiver sees reasoning for the patient in view.
+  const patient = await resolveActivePatient(supabase, user.id);
   if (!patient) return jsonError("Add a patient first to see etiology-based reasoning.", 404);
 
   const { data: target } = await supabase

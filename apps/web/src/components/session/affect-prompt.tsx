@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { SESSION_COPY } from "@/lib/session/copy";
 import type { Affect } from "@/lib/session/schema";
 
@@ -30,9 +31,16 @@ export function AffectButtons({ onPick }: { onPick: (affect: Affect) => void }) 
  * Always answerable in exactly one tap: either affect, or skip — never blocks the session.
  */
 export function AffectScreen({ onDone }: { onDone: (affect: Affect | null) => void }) {
+  // Match the RunningSession focus-move: on appearance, move focus to this screen's heading so
+  // keyboard/AT users land on (and hear) the new screen rather than a silent <body>.
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+
   return (
     <section className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-white px-6 text-center text-zinc-900">
-      <h1 tabIndex={-1} className="text-3xl font-semibold">
+      <h1 ref={headingRef} tabIndex={-1} className="text-3xl font-semibold">
         {SESSION_COPY.affect.preHeading}
       </h1>
       <p className="max-w-2xl text-4xl font-semibold leading-tight">

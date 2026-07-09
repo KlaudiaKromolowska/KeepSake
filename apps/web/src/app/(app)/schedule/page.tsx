@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/actions";
+import { resolveActivePatient } from "@/lib/patients/active";
 import { SCHEDULE_PLAN_COPY as C } from "@/lib/schedule/copy";
 import {
   type BoosterStep,
@@ -39,15 +40,11 @@ interface TargetPlanRow {
  * (own patient only). Light theme forced (bg-white) to match sibling caregiver pages.
  */
 export default async function SchedulePage() {
-  const { supabase } = await requireUser();
+  const { user, supabase } = await requireUser();
 
-  const { data: patient, error: patientErr } = await supabase
-    .from("patients")
-    .select("id, timezone, etiology")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (patientErr) return <Shell body={C.unavailable} />;
+  // The ACTIVE (cookie-selected) owned patient — same resolution the dashboard/session use — so a
+  // multi-patient caregiver sees the plan for the patient they switched to, not the oldest one.
+  const patient = await resolveActivePatient(supabase, user.id);
   if (!patient) return <Shell body={C.noTarget} />;
 
   const { data, error: targetsErr } = await supabase

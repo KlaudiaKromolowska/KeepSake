@@ -16,6 +16,20 @@ vi.mock("@/lib/ai/rct-report", () => ({ runRctReport: runRctReportMock }));
 const { createClientMock } = vi.hoisted(() => ({ createClientMock: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: createClientMock }));
 
+// resolveActivePatient reads the active-patient cookie from next/headers.
+const { cookiesMock, setActiveCookie } = vi.hoisted(() => {
+  let active: string | undefined;
+  return {
+    cookiesMock: vi.fn(async () => ({
+      get: (_name: string) => (active ? { value: active } : undefined),
+    })),
+    setActiveCookie: (v: string | undefined) => {
+      active = v;
+    },
+  };
+});
+vi.mock("next/headers", () => ({ cookies: cookiesMock }));
+
 import { POST } from "./route";
 
 /** Chainable query stub: every filter returns `this`; awaiting or maybeSingle yields `result`. */
@@ -36,8 +50,9 @@ interface FakeOpts {
 }
 
 function fakeSupabase(opts: FakeOpts) {
+  // patients read returns an ARRAY (listOwnedPatients maps over it, oldest first).
   const patient = opts.patient ?? {
-    data: { id: "p1", display_name: "Marta", etiology: "alzheimers", timezone: "Europe/Warsaw" },
+    data: [{ id: "p1", display_name: "Marta", etiology: "alzheimers", timezone: "Europe/Warsaw" }],
     error: null,
   };
   const defaults: Record<string, { data: unknown; error: unknown }> = {
@@ -67,6 +82,7 @@ function post(body: unknown): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  setActiveCookie(undefined);
   assertAiQuotaMock.mockResolvedValue(undefined);
   runRctReportMock.mockResolvedValue({
     report: "## Summary\nok",
@@ -111,9 +127,40 @@ describe("POST /api/rct-report — auth & quota", () => {
   });
 
   it("404 when the caller has no patient/data", async () => {
-    createClientMock.mockResolvedValue(fakeSupabase({ patient: { data: null, error: null } }));
+    createClientMock.mockResolvedValue(fakeSupabase({ patient: { data: [], error: null } }));
     const res = await POST(post({ question: "What is the acquisition rate?" }));
     expect(res.status).toBe(404);
+  });
+
+  it("analyzes the ACTIVE (cookie-selected) patient, not the oldest owned one", async () => {
+    createClientMock.mockResolvedValue(
+      fakeSupabase({
+        patient: {
+          data: [
+            {
+              id: "p_old",
+              display_name: "Marta",
+              etiology: "alzheimers",
+              timezone: "Europe/Warsaw",
+            },
+            {
+              id: "p_new",
+              display_name: "Nowak",
+              etiology: "alzheimers",
+              timezone: "Europe/Warsaw",
+            },
+          ],
+          error: null,
+        },
+      }),
+    );
+    setActiveCookie("p_new");
+    const res = await POST(post({ question: "What is the acquisition rate?" }));
+    expect(res.status).toBe(200);
+    // The report context must carry the ACTIVE patient's name, not the oldest patient's.
+    const opts = runRctReportMock.mock.calls[0][0];
+    expect(opts.context).toContain("PATIENT: Nowak");
+    expect(opts.context).not.toContain("PATIENT: Marta");
   });
 });
 

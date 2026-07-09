@@ -52,7 +52,7 @@ export function AnswerScreen({
       {imageUrl && !imageFailed && (
         <Image
           src={imageUrl}
-          alt={question}
+          alt={SESSION_COPY.shared.imageAlt}
           width={480}
           height={480}
           className="max-h-[40vh] w-auto rounded-3xl object-contain"

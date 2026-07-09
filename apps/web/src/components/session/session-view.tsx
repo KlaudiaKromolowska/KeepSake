@@ -263,7 +263,6 @@ function RunningSession({
 
   return (
     <div ref={screenRef}>
-      <NarrationToggle muted={narration.muted} onToggle={narration.toggleMuted} />
       {offlineQueue.pendingCount > 0 && (
         <div
           role="alert"
@@ -358,6 +357,10 @@ function RunningSession({
           the engine/timer, so dismissing it (tap or auto) can't advance or stall the SR runner; the
           onChange handler already clears it the moment the engine reaches the next probe. */}
       {reward && <CapsuleReward capsule={reward} onDismiss={() => setReward(null)} />}
+
+      {/* Rendered last so the phase heading/content precedes it in DOM/tab order; `position: fixed`
+          keeps it visually pinned top-right, reachable from every screen. */}
+      <NarrationToggle muted={narration.muted} onToggle={narration.toggleMuted} />
     </div>
   );
 }

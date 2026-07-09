@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { CAPSULE_COPY } from "@/lib/capsules/copy";
 import type { Capsule } from "@/lib/capsules/reward";
 
 const C = CAPSULE_COPY.reward;
+
+const HEADING_ID = "capsule-reward-heading";
+// Tab-focusable descendants of the dialog — the video (when present) and the dismiss button.
+// The heading (tabIndex=-1) is programmatically focusable but excluded from the Tab cycle.
+const FOCUSABLE =
+  'a[href], button:not([disabled]), video[controls], [tabindex]:not([tabindex="-1"])';
 
 /** Backup auto-dismiss. The reward is a brief warm glance, not a viewing — it also clears the moment
  * the engine reaches the next probe (SessionView drops it on `awaiting_probe`), so this is only the
@@ -21,11 +27,17 @@ const AUTO_DISMISS_MS = 8000;
  */
 export function CapsuleReward({ capsule, onDismiss }: { capsule: Capsule; onDismiss: () => void }) {
   const [reducedMotion, setReducedMotion] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     setReducedMotion(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
+    // Move focus into the dialog and restore it to the previously-focused control on close, so
+    // keyboard focus can never fall through to the outcome buttons underneath (a stray tap there
+    // would mis-record a trial).
+    const previouslyFocused = document.activeElement as HTMLElement | null;
     headingRef.current?.focus();
+    return () => previouslyFocused?.focus?.();
   }, []);
 
   useEffect(() => {
@@ -33,13 +45,33 @@ export function CapsuleReward({ capsule, onDismiss }: { capsule: Capsule; onDism
     return () => window.clearTimeout(id);
   }, [onDismiss]);
 
+  // Trap Tab/Shift+Tab within the dialog: wrap focus at the first/last focusable descendant.
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Tab") return;
+    const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE);
+    if (!focusables || focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   return (
     <div
+      ref={dialogRef}
       role="dialog"
-      aria-label={C.heading}
+      aria-modal="true"
+      aria-labelledby={HEADING_ID}
+      onKeyDown={onKeyDown}
       className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 bg-white/95 px-6 text-center text-zinc-900 backdrop-blur-sm"
     >
-      <h2 ref={headingRef} tabIndex={-1} className="text-3xl font-semibold">
+      <h2 id={HEADING_ID} ref={headingRef} tabIndex={-1} className="text-3xl font-semibold">
         {C.heading}
       </h2>
 

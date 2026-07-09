@@ -47,7 +47,8 @@ export const SESSION_COPY = {
   },
   ended: {
     heading: "Session complete",
-    stats: (trials: number, recalls: number) => `Practised ${trials} times · remembered ${recalls}`,
+    // Patient-facing: warm, never a scorecard. Raw counts live in the caregiver-only debrief.
+    togetherLine: "You spent some lovely time together.",
     closeLine: "Lovely work today. Practise again whenever suits you both.",
     masteredLine: "Wonderful — this memory has taken hold.",
     rescope: "This memory might need a different shape. We'll help you adjust it soon.",
@@ -77,6 +78,9 @@ export const SESSION_COPY = {
     copy: "Copy note",
     copied: "Copied",
     error: "Couldn't load your note just now.",
+    // Caregiver-only tally — the raw counts, kept off the patient-facing summary.
+    tally: (trials: number, recalls: number) =>
+      `Just for you: remembered ${recalls} of ${trials} practised.`,
   },
   preSession: {
     heading: "Ready when you are",
@@ -95,5 +99,8 @@ export const SESSION_COPY = {
     endSession: "End session",
     saveError: "Couldn't save — check connection",
     retry: "Retry",
+    // Honest, non-duplicative alt text: the targets model has no per-image description field, so we
+    // describe the picture's purpose rather than repeating the on-screen question.
+    imageAlt: "A photo chosen to help recall this memory",
   },
 } as const;

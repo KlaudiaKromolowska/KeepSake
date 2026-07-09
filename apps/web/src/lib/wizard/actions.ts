@@ -4,6 +4,7 @@ import { buildWizardPrompt, refineUserMessage } from "@keepsake/core/prompts/wiz
 import type { ActionResult } from "@/lib/actions";
 import { failAction, requireUser } from "@/lib/actions";
 import { AiUnavailableError, assertAiQuota, generateStructured, QuotaError } from "@/lib/ai/core";
+import { resolveActivePatient } from "@/lib/patients/active";
 import type { Json } from "@/lib/supabase/database.types";
 import { WIZARD_COPY } from "./copy";
 import { isOwnedPhotoPath } from "./photo-upload";
@@ -99,13 +100,9 @@ export async function createTargetAction(input: unknown): Promise<ActionResult<{
 
   const { user, supabase } = await requireUser();
 
-  const { data: patient, error: patientErr } = await supabase
-    .from("patients")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (patientErr) return failAction("createTarget: patient", patientErr, WIZARD_COPY.errors.save);
+  // Attach to the caregiver's ACTIVE (cookie-selected) patient — not the oldest — so a multi-patient
+  // caregiver who switched patients never has a new target silently misfiled under the wrong one.
+  const patient = await resolveActivePatient(supabase, user.id);
   if (!patient) return { data: null, error: WIZARD_COPY.errors.noPatient };
 
   // A caregiver may only attach their OWN uploaded object: keep the path only if its folder is the
