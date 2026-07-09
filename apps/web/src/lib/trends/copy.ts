@@ -13,6 +13,7 @@ export const TRENDS_COPY = {
   unavailable: "Trends aren't available right now. Please try again.",
   noTarget: "Create a memory target to start building trend data.",
   backToHome: "Back to home",
+  exportCsv: "Download practice data (CSV)",
   retention: {
     heading: "Item retention, per target",
     hint: "The longest delay recalled each session, target by target.",

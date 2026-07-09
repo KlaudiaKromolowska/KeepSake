@@ -142,6 +142,13 @@ export default async function TrendsPage() {
           </section>
         )}
 
+        <a
+          href="/api/export"
+          className="flex min-h-[48px] items-center rounded-xl border border-zinc-300 px-6 text-lg font-medium text-zinc-900 underline underline-offset-4 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+        >
+          {TRENDS_COPY.exportCsv}
+        </a>
+
         <Link
           href="/dashboard"
           className="flex min-h-[48px] items-center rounded-xl border border-zinc-300 px-6 text-lg font-medium text-zinc-900 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
