@@ -397,3 +397,44 @@ function handleEndRequested(state: SessionState): SessionState {
 function softCapReached(state: SessionState, at: number, config: SrConfig): boolean {
   return at - state.startedAt >= config.sessionSoftCapSec * 1000;
 }
+
+/**
+ * Resolves what the session-start probe actually decided, for callers (the between/booster
+ * scheduler dispatch in `endSessionAction`) that must not move the schedule on a raw `"unclear"`
+ * outcome yet MUST treat a terminal double-unclear as a miss (PLAN §4.2 v4: two consecutive
+ * unclears = confirmed miss). `handleStartProbe` records that resolution as `{ outcome: "unclear",
+ * corrected: true }` (see `startProbeMiss`) — a shape a naive `trials[0].outcome` read can't tell
+ * apart from a still-open, non-terminal unclear re-probe (`corrected: false`).
+ *
+ * Every genuine start-probe trial is logged at `intervalSec === 0` (see `handleStartProbe`'s
+ * `trial(0, ...)` calls); every trial-loop rung is logged at `intervalSec >= config.baseIntervalSec`
+ * (`handleIntervalOverride`/`resetIntervalSec`/`nextIntervalSec` all floor at `baseIntervalSec`, and
+ * `config.baseIntervalSec` is always > 0). So the first non-zero-interval trial marks the point where
+ * `resumeSession` demoted `isStartProbe` and normal trial-loop probing began — that trial (or any
+ * after it) is never a start-probe resolution, no matter its own outcome/corrected shape.
+ *
+ * Scans from the front, bailing to `null` the moment it sees a trial-loop entry, and otherwise
+ * skipping non-terminal re-probes (`unclear` + `corrected: false`), returning the first trial whose
+ * signature actually terminates the start probe:
+ * - `recall` (always `corrected: false` for a real start-probe recall)
+ * - `miss` (always `corrected: true`)
+ * - `unclear` + `corrected: true` (the double-unclear conversion) → resolves to `"miss"`
+ *
+ * Any other 0s trial shape (e.g. the guaranteed 0s end-of-session win after the caregiver closes
+ * mid re-probe) means the start probe itself was never resolved — returns `null`, same as the
+ * scheduler's existing `"unclear"` no-op. So does a same-day resume that abandoned an open start-probe
+ * unclear and continued straight into the trial loop: the resume demotes `isStartProbe` without ever
+ * terminating the probe, so its first ordinary trial (interval >= baseIntervalSec) must not be
+ * misread as the start-probe's decision.
+ */
+export function resolvedStartProbeOutcome(trials: readonly TrialRecord[]): Outcome | null {
+  for (const t of trials) {
+    if (t.intervalSec !== 0) return null; // trial-loop rung, not a start-probe trial — bail
+    if (t.outcome === "unclear" && !t.corrected) continue; // still-open re-probe, keep scanning
+    if (t.outcome === "recall" && !t.corrected) return "recall";
+    if (t.outcome === "miss" && t.corrected) return "miss";
+    if (t.outcome === "unclear" && t.corrected) return "miss"; // double-unclear → confirmed miss
+    return null; // some other trial shape — the start probe was bailed on, never resolved
+  }
+  return null;
+}

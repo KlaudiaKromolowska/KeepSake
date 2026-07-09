@@ -732,6 +732,97 @@ describe("endSessionAction", () => {
     expect(p.next_due_at).toBe(existingDue);
   });
 
+  it("(e) BETWEEN schedule + start-probe miss via double-unclear → onSessionStartOutcome shrinks the gap", async () => {
+    // Regression for the double-unclear schedule no-op: two consecutive unclears on the start
+    // probe resolve to a confirmed miss (PLAN §4.2 v4), recorded as trials[0]="unclear"
+    // (corrected:false, still-open) then trials[1]="unclear" (corrected:true, the conversion). A
+    // naive `trials[0].outcome` read sees "unclear" and never shrinks the gap — this must shrink.
+    const existingDue = "2023-11-10T00:00:00.000Z";
+    const { client, calls } = endClient(
+      { ended_at: null, summary: { startProbe: true }, patient_id: "p-1" },
+      {
+        schedule_mode: "between",
+        between_session_gap_days: 2,
+        booster_step: 0,
+        next_due_at: existingDue,
+        mastered_at: null,
+      },
+    );
+    mockUser(client);
+    const s = snap({
+      endReason: "caregiver",
+      trials: [
+        { intervalSec: 0, outcome: "unclear", isScreening: false, corrected: false, at: NOW },
+        { intervalSec: 0, outcome: "unclear", isScreening: false, corrected: true, at: NOW },
+      ],
+    });
+    await endSessionAction({ sessionId: SESSION_ID, targetId: TARGET_ID, snapshot: s });
+    const ts = calls.find((c) => c.table === "target_state" && c.verb === "upsert");
+    const p = ts?.payload as Record<string, unknown>;
+    // miss shrinks gap 2 → max(2*0.5,1)=1 — NOT left at 2 (the no-op bug's symptom)
+    expect(p.between_session_gap_days).toBe(1);
+    expect(p.next_due_at).toBe(new Date(NOW + 1 * DAY).toISOString());
+    expect(p.schedule_mode).toBe("between");
+  });
+
+  it("(e2) BOOSTER schedule + start-probe miss via double-unclear → onBoosterOutcome drops the step", async () => {
+    const existingDue = "2023-11-10T00:00:00.000Z";
+    const { client, calls } = endClient(
+      { ended_at: null, summary: { startProbe: true }, patient_id: "p-1" },
+      {
+        schedule_mode: "booster",
+        between_session_gap_days: 0,
+        booster_step: 2,
+        next_due_at: existingDue,
+        mastered_at: "2023-11-01T00:00:00.000Z",
+      },
+    );
+    mockUser(client);
+    const s = snap({
+      endReason: "caregiver",
+      progress: { ...snap().progress, mastered: true, startStreak: 0 },
+      trials: [
+        { intervalSec: 0, outcome: "unclear", isScreening: false, corrected: false, at: NOW },
+        { intervalSec: 0, outcome: "unclear", isScreening: false, corrected: true, at: NOW },
+      ],
+    });
+    await endSessionAction({ sessionId: SESSION_ID, targetId: TARGET_ID, snapshot: s });
+    const ts = calls.find((c) => c.table === "target_state" && c.verb === "upsert");
+    const p = ts?.payload as Record<string, unknown>;
+    expect(p.schedule_mode).toBe("booster");
+    expect(p.booster_step).toBe(1); // 2 → 1, NOT left at 2 (the no-op bug's symptom)
+    expect(p.next_due_at).toBe(new Date(NOW + config.boosterCadenceDays[1] * DAY).toISOString());
+  });
+
+  it("(f) existing schedule + a still-open (non-terminal) start-probe unclear → schedule unchanged", async () => {
+    // A single unclear below the cap never resolves the start probe — must stay a true no-op,
+    // same as before the fix.
+    const existingDue = "2023-11-10T00:00:00.000Z";
+    const { client, calls } = endClient(
+      { ended_at: null, summary: { startProbe: true }, patient_id: "p-1" },
+      {
+        schedule_mode: "between",
+        between_session_gap_days: 2,
+        booster_step: 0,
+        next_due_at: existingDue,
+        mastered_at: null,
+      },
+    );
+    mockUser(client);
+    const s = snap({
+      endReason: "caregiver",
+      trials: [
+        { intervalSec: 0, outcome: "unclear", isScreening: false, corrected: false, at: NOW },
+      ],
+    });
+    await endSessionAction({ sessionId: SESSION_ID, targetId: TARGET_ID, snapshot: s });
+    const ts = calls.find((c) => c.table === "target_state" && c.verb === "upsert");
+    const p = ts?.payload as Record<string, unknown>;
+    expect(p.schedule_mode).toBe("between");
+    expect(p.between_session_gap_days).toBe(2);
+    expect(p.next_due_at).toBe(existingDue);
+  });
+
   it("(retry heal) already-ended with stored applied values → re-applies them, no recompute", async () => {
     // Simulates a retry after the target_state upsert failed on the first attempt but the
     // sessions-close (single commit point) had already stored the applied bundle. The heal must
