@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { removeCapsuleAction, uploadCapsuleAction } from "@/lib/capsules/actions";
 import { CAPSULE_COPY } from "@/lib/capsules/copy";
-import { submitRemove, submitUpload } from "@/lib/capsules/manage-form";
+import { confirmingIdAfterRemove, submitRemove, submitUpload } from "@/lib/capsules/manage-form";
 import type { Capsule } from "@/lib/capsules/reward";
 
 const C = CAPSULE_COPY.manage;
@@ -55,7 +55,9 @@ export function CapsuleManager({
     setError(null);
     startTransition(async () => {
       const res = await submitRemove(removeCapsuleAction, capsuleId);
-      setConfirmingId(null);
+      // Order matters: decide the next confirmingId from the result, so a failure keeps the error
+      // associated with the item that failed instead of clearing it before we know the outcome.
+      setConfirmingId(confirmingIdAfterRemove(capsuleId, res.error));
       if (res.error !== null) {
         setError(res.error);
         return;
