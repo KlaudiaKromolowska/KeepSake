@@ -25,6 +25,8 @@ export function WizardView({ photoOptions }: { photoOptions: string[] }) {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [proposal, setProposal] = useState<WizardProposal | null>(null);
+  // Object key of a photo the caregiver uploaded for THIS proposal; attached to the target on save.
+  const [photoPath, setPhotoPath] = useState<string | null>(null);
   const [handOpen, setHandOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -36,6 +38,7 @@ export function WizardView({ photoOptions }: { photoOptions: string[] }) {
     setGenerating(true);
     setGenError(null);
     setProposal(null);
+    setPhotoPath(null); // a new/re-shaped proposal invalidates any photo checked against the old one
     try {
       const res = await generateTargetAction({ description: description.trim() });
       if (res.error !== null) setGenError(res.error);
@@ -56,7 +59,7 @@ export function WizardView({ photoOptions }: { photoOptions: string[] }) {
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await createTargetAction(input);
+      const res = await createTargetAction({ ...input, ...(photoPath ? { photoPath } : {}) });
       if (res.error !== null) setSaveError(res.error);
       else setSaved(true);
     } catch {
@@ -69,6 +72,7 @@ export function WizardView({ photoOptions }: { photoOptions: string[] }) {
   function reset() {
     setDescription("");
     setProposal(null);
+    setPhotoPath(null);
     setGenError(null);
     setHandOpen(false);
     setSaveError(null);
@@ -161,6 +165,7 @@ export function WizardView({ photoOptions }: { photoOptions: string[] }) {
         <PhotoQaSection
           photoOptions={photoOptions}
           target={{ question: proposal.question, answer: proposal.answer }}
+          onUploaded={setPhotoPath}
         />
       )}
 

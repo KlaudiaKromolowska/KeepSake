@@ -81,3 +81,36 @@ export function validatePhotoBytes(bytes: Uint8Array): PhotoValidation {
 export function photoObjectPath(caregiverId: string, mime: PhotoMime, uuid: string): string {
   return `${caregiverId}/${uuid}.${EXT_FOR_MIME[mime]}`;
 }
+
+/** A `<uuid>.<jpg|png|webp>` object filename — the second segment of a photo object key. */
+const PHOTO_FILENAME_RE = /^[0-9a-f-]{36}\.(jpg|png|webp)$/i;
+
+/** Split a `<folder>/<file>` key once; null if it is not exactly two non-empty segments. */
+function splitObjectKey(path: string): { folder: string; file: string } | null {
+  const slash = path.indexOf("/");
+  if (slash <= 0 || slash === path.length - 1) return null;
+  const file = path.slice(slash + 1);
+  if (file.includes("/")) return null; // no nested folders — the bucket is flat per caregiver
+  return { folder: path.slice(0, slash), file };
+}
+
+/**
+ * Shape gate for a stored photo object key before it is handed to storage for signing. Defense in
+ * depth only — storage RLS is the real boundary — but it keeps malformed/legacy values out of the
+ * signing call. Accepts `<caregiverId>/<uuid>.<ext>`; the folder is a uid, so any non-empty
+ * slash-free segment is allowed there.
+ */
+export function isPhotoObjectPath(path: string): boolean {
+  const parts = splitObjectKey(path);
+  return parts !== null && PHOTO_FILENAME_RE.test(parts.file);
+}
+
+/**
+ * True iff `path` is a well-formed photo key whose owning folder is exactly `caregiverId`. Used at
+ * the two untrusted boundaries: persisting a client-supplied path onto a target (a caregiver may
+ * only attach their OWN object), and — belt-and-braces over storage RLS — before signing one.
+ */
+export function isOwnedPhotoPath(path: string, caregiverId: string): boolean {
+  const parts = splitObjectKey(path);
+  return parts !== null && parts.folder === caregiverId && PHOTO_FILENAME_RE.test(parts.file);
+}
