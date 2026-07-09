@@ -16,7 +16,7 @@ import {
   onSessionStartOutcome,
 } from "../sr/scheduler";
 import type { SessionState, TargetProgress } from "../sr/session";
-import { sessionReduce, startSession } from "../sr/session";
+import { resolvedStartProbeOutcome, sessionReduce, startSession } from "../sr/session";
 import type { Etiology, Outcome } from "../sr/types";
 import type { MemoryState } from "./memoryModel";
 import {
@@ -97,13 +97,13 @@ function runCandidacyScreen(
   return { state, levelReached };
 }
 
-interface MemoryRef {
+export interface MemoryRef {
   memory: MemoryState;
   /** epoch ms of the last time the patient was shown or successfully recalled the target. */
   lastExposureAtMs: number;
 }
 
-interface SessionDriveResult {
+export interface SessionDriveResult {
   session: SessionState;
   /** The session-start probe outcome, when this session had one (every session but the first). */
   startProbeOutcome: Outcome | null;
@@ -114,7 +114,7 @@ interface SessionDriveResult {
 
 /** Drives one session's reducer loop end-to-end (teach/distractor/probe/correction cycles),
  *  feeding each probe through the synthetic memory model and updating it on recall/miss. */
-function driveSession(
+export function driveSession(
   initial: SessionState,
   config: SrConfig,
   memoryRef: MemoryRef,
@@ -123,7 +123,6 @@ function driveSession(
 ): SessionDriveResult {
   let state = initial;
   let at = initial.startedAt;
-  let startProbeOutcome: Outcome | null = null;
   let startProbeElapsedSec: number | null = null;
   const trialIntervalsSec: number[] = [];
   let iterations = 0;
@@ -151,7 +150,6 @@ function driveSession(
         const elapsedSec = Math.max(0, (at - memoryRef.lastExposureAtMs) / 1_000);
         const outcome = drawOutcome(rng, memoryRef.memory, elapsedSec);
         if (state.isStartProbe) {
-          startProbeOutcome = outcome;
           startProbeElapsedSec = elapsedSec;
         } else if (state.intervalSec > 0) {
           trialIntervalsSec.push(state.intervalSec);
@@ -179,6 +177,11 @@ function driveSession(
         break;
     }
   }
+  // Resolved from the final trial log (not tracked live per-draw): a terminal double-unclear
+  // must surface as "miss" to the scheduler dispatch below, same as the real app's endSessionAction
+  // — reusing the identical core rule keeps the sim from silently biasing schedule-shrink/
+  // time-to-mastery conclusions on that path. See resolvedStartProbeOutcome's docstring.
+  const startProbeOutcome = resolvedStartProbeOutcome(state.trials);
   return { session: state, startProbeOutcome, startProbeElapsedSec, trialIntervalsSec };
 }
 
