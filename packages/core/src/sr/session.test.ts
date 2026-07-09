@@ -831,6 +831,28 @@ describe("resolvedStartProbeOutcome", () => {
   it("no trials → null", () => {
     expect(resolvedStartProbeOutcome([])).toBeNull();
   });
+
+  it("a same-day resume that abandoned an open start-probe unclear must not misattribute the next ordinary trial-loop outcome as the start-probe resolution", () => {
+    // startSession → unclear (open, corrected: false) → resumeSession → recall.
+    const s = sessionReduce(
+      frozen(openStartProbe()),
+      { type: "probe_result", outcome: "unclear", at: 2 * DAY },
+      config,
+    );
+    expect(s.trials.at(-1)).toMatchObject({ intervalSec: 0, outcome: "unclear", corrected: false });
+
+    const resumed = resumeSession(s, 2 * DAY + 500, config);
+    expect(resumed).not.toBeNull();
+    expect(resumed?.isStartProbe).toBe(false); // resume demotes to an ordinary trial rung
+
+    const final = probe(resumed as SessionState, "recall", 2 * DAY + 1000);
+    expect(final.trials.map((t) => [t.intervalSec, t.outcome, t.corrected])).toEqual([
+      [0, "unclear", false],
+      [config.baseIntervalSec, "recall", false],
+    ]);
+    // The recall belongs to the trial loop, not the start probe — must not move the schedule.
+    expect(resolvedStartProbeOutcome(final.trials)).toBeNull();
+  });
 });
 
 describe("purity — inputs are never mutated (rule 12)", () => {
