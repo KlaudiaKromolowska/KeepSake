@@ -42,14 +42,14 @@ describe("flushQueue", () => {
     const order: string[] = [];
     const remaining = await flushQueue(store, async (w) => {
       order.push(w.id);
-      return true;
+      return { ok: true };
     });
 
     expect(order).toEqual(["a", "b"]);
     expect(remaining).toEqual([]);
   });
 
-  it("stops at the first failure and leaves later writes queued (preserves trial order)", async () => {
+  it("stops at the first retryable failure and leaves later writes queued (preserves trial order)", async () => {
     const store = createMemoryQueueStore();
     await store.put(write("a", 1));
     await store.put(write("b", 2));
@@ -58,14 +58,16 @@ describe("flushQueue", () => {
     const attempted: string[] = [];
     const remaining = await flushQueue(store, async (w) => {
       attempted.push(w.id);
-      return w.id !== "b"; // b fails (still offline)
+      // b fails transiently (still offline) — retryable, must stop the flush here.
+      return w.id !== "b" ? { ok: true } : { ok: false, retryable: true };
     });
 
-    expect(attempted).toEqual(["a", "b"]); // c is never attempted once b fails
+    expect(attempted).toEqual(["a", "b"]); // c is never attempted once b fails retryably
     expect(remaining.map((w) => w.id)).toEqual(["b", "c"]);
+    expect(await store.listDeadLetters()).toEqual([]); // a retryable failure is never dead-lettered
   });
 
-  it("a replay that throws is treated as a failure, not a crash", async () => {
+  it("a replay that throws is treated as a retryable failure, not a crash", async () => {
     const store = createMemoryQueueStore();
     await store.put(write("a", 1));
 
@@ -74,6 +76,25 @@ describe("flushQueue", () => {
     });
 
     expect(remaining.map((w) => w.id)).toEqual(["a"]);
+  });
+
+  it("a non-retryable failure on one write does not block later writes (no head-of-line blocking)", async () => {
+    const store = createMemoryQueueStore();
+    await store.put(write("a", 1)); // poison write: fails deterministically every replay
+    await store.put(write("b", 2)); // must still flush despite a's failure
+
+    const attempted: string[] = [];
+    const remaining = await flushQueue(store, async (w) => {
+      attempted.push(w.id);
+      if (w.id === "a") return { ok: false, retryable: false, reason: "validation rejected" };
+      return { ok: true };
+    });
+
+    expect(attempted).toEqual(["a", "b"]); // b is still attempted after a's non-retryable failure
+    expect(remaining).toEqual([]); // a is no longer "pending" — it's dead-lettered, not stuck
+    const deadLetters = await store.listDeadLetters();
+    expect(deadLetters).toHaveLength(1);
+    expect(deadLetters[0]).toMatchObject({ id: "a", reason: "validation rejected" });
   });
 
   it("idempotent replay: a write already applied server-side is removed without a second effect", async () => {
@@ -87,7 +108,7 @@ describe("flushQueue", () => {
     const serverRows = new Map<string, number>(); // id -> apply count, as the "server" would see it
     const replay = async (queued: QueuedWrite) => {
       serverRows.set(queued.id, (serverRows.get(queued.id) ?? 0) + 1); // upsert semantics: idempotent
-      return true;
+      return { ok: true as const };
     };
 
     await flushQueue(store, replay);

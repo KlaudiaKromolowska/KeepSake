@@ -1,13 +1,22 @@
-import type { QueuedWrite, QueueStore } from "./write-queue";
+import type { DeadLetteredWrite, QueuedWrite, QueueStore } from "./write-queue";
 
 const DB_NAME = "keepsake-offline-queue";
 const STORE_NAME = "writes";
+const DEAD_LETTER_STORE = "dead-letters";
+// v2 adds the dead-letter store (non-retryable replay failures) alongside the original queue.
+const DB_VERSION = 2;
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
-      req.result.createObjectStore(STORE_NAME, { keyPath: "id" });
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(DEAD_LETTER_STORE)) {
+        db.createObjectStore(DEAD_LETTER_STORE, { keyPath: "id" });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -48,6 +57,25 @@ export function createIndexedDbQueueStore(): QueueStore {
         tx.objectStore(STORE_NAME).delete(id);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
+      });
+    },
+    async deadLetter(write, reason) {
+      const conn = await db;
+      return new Promise((resolve, reject) => {
+        const tx = conn.transaction([STORE_NAME, DEAD_LETTER_STORE], "readwrite");
+        tx.objectStore(STORE_NAME).delete(write.id);
+        tx.objectStore(DEAD_LETTER_STORE).put({ ...write, reason } satisfies DeadLetteredWrite);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    },
+    async listDeadLetters() {
+      const conn = await db;
+      return new Promise((resolve, reject) => {
+        const tx = conn.transaction(DEAD_LETTER_STORE, "readonly");
+        const req = tx.objectStore(DEAD_LETTER_STORE).getAll();
+        req.onsuccess = () => resolve(req.result as DeadLetteredWrite[]);
+        req.onerror = () => reject(req.error);
       });
     },
   };
