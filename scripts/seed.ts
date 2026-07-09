@@ -785,7 +785,6 @@ async function seed(): Promise<void> {
       timezone: PATIENT_TZ,
       etiology: "alzheimers",
       is_demo: true,
-      notes: null,
     })
     .select("id")
     .single();

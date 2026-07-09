@@ -228,6 +228,35 @@ export type Database = {
         };
         Relationships: [];
       };
+      patient_notes: {
+        Row: {
+          created_at: string;
+          note: string;
+          patient_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          note: string;
+          patient_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          note?: string;
+          patient_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "patient_notes_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: true;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       patients: {
         Row: {
           caregiver_id: string | null;
@@ -236,7 +265,6 @@ export type Database = {
           etiology: Database["public"]["Enums"]["etiology"];
           id: string;
           is_demo: boolean;
-          notes: string | null;
           org_id: string | null;
           timezone: string;
           updated_at: string;
@@ -248,7 +276,6 @@ export type Database = {
           etiology?: Database["public"]["Enums"]["etiology"];
           id?: string;
           is_demo?: boolean;
-          notes?: string | null;
           org_id?: string | null;
           timezone: string;
           updated_at?: string;
@@ -260,7 +287,6 @@ export type Database = {
           etiology?: Database["public"]["Enums"]["etiology"];
           id?: string;
           is_demo?: boolean;
-          notes?: string | null;
           org_id?: string | null;
           timezone?: string;
           updated_at?: string;

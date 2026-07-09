@@ -36,10 +36,19 @@ export async function personalizedDistractorsAction(targetId?: string): Promise<
 
     const { data: patient, error: patientErr } = await supabase
       .from("patients")
-      .select("display_name, notes")
+      .select("display_name")
       .eq("id", target.patient_id)
       .single();
     if (patientErr || !patient) return { data: null, error: null };
+
+    // The caregiver note now lives in its own table (patient_notes) so the read-only clinician role
+    // cannot read it (GDPR minimization). A missing row / no read access degrades to no note, never
+    // an error — personalization is best-effort.
+    const { data: noteRow } = await supabase
+      .from("patient_notes")
+      .select("note")
+      .eq("patient_id", target.patient_id)
+      .maybeSingle();
 
     await assertAiQuota(supabase, "distractors");
 
@@ -49,7 +58,7 @@ export async function personalizedDistractorsAction(targetId?: string): Promise<
       system: DISTRACTORS_SYSTEM,
       user: buildDistractorsPrompt({
         displayName: patient.display_name,
-        notes: patient.notes,
+        notes: noteRow?.note ?? null,
         locale: "en",
       }),
       model: "claude-haiku-4-5",
