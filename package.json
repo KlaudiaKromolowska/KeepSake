@@ -16,6 +16,7 @@
     "format": "biome format --write .",
     "seed": "tsx scripts/seed.ts",
     "sim": "tsx scripts/simulate.ts",
+    "gen:prior": "tsx scripts/gen-population-prior.ts && biome check --write packages/core/src/sr/populationPrior.data.ts",
     "eval:wizard": "tsx --tsconfig apps/web/tsconfig.json scripts/eval-wizard.ts",
     "fixtures:record": "tsx --tsconfig apps/web/tsconfig.json scripts/record-fixtures.ts",
     "audio:generate": "tsx --tsconfig apps/web/tsconfig.json scripts/generate-audio.ts"

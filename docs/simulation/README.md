@@ -123,6 +123,42 @@ the first booster gap.
 Hand-rolled SVG (`scripts/svg-chart.ts`), no charting dependency, self-contained (safe to embed
 anywhere, including a slide).
 
+## Derived artifact: the per-etiology starting-interval prior (PLAN.md §5 — "where ML earns its place")
+
+The one place a population model *honestly* earns its keep in this product is a **starting-interval
+prior**, not a per-trial ML scheduler. Today a brand-new target cold-starts at the generic
+`baseIntervalSec` (15s, or 10s for DLB/PD). This simulation lets us do slightly better: for each
+etiology we look at where that etiology's **mastered** synthetic patients actually operated
+within-session, and open a new target a couple of rungs higher — skipping the trivially-easy opening
+rungs the cohort reliably cleared.
+
+**Prior, not proof.** This is derived from the *same illustrative synthetic memory model* as every
+other number on this page — not patient data, not fitted, not validated. It is a nudge to the
+*opening rung only*; the deterministic doubling/halving ladder, the errorless correction, mastery,
+boosters, and the rescope safety valve are all completely unchanged. FSRS-style per-trial ML remains
+explicitly rejected as the core (PLAN.md §1).
+
+- **How it's derived** (`derivePopulationPrior`, `packages/core/src/sr/populationPrior.ts`): pool the
+  within-session trial intervals of each etiology's mastered patients, take the conservative **25th
+  percentile** (deliberately *below* the settled-median band, so a fresh target keeps real climb
+  headroom and the errorless floor isn't set punishingly high), and **snap it down to a real ladder
+  rung** of that etiology's config. Etiologies with fewer than 20 mastered patients get no prior and
+  fall back to the cold-start default.
+- **How it's applied** (`warmStartConfig` / `warmStartDefaults`): by **raising `baseIntervalSec`** to
+  that warm-start rung — never by injecting an off-ladder interval or touching a reducer. Because
+  `baseIntervalSec` is simultaneously the opening rung, the revert floor, *and* the base-miss
+  threshold, raising it keeps the ladder/rescope machine internally consistent: a fresh target that
+  genuinely can't hold the warm-start interval reverts to it, counts base misses there, and rescopes
+  exactly as a cold-start target that can't hold 15s would.
+- **Precomputed + committed** (`packages/core/src/sr/populationPrior.data.ts`): the prior is a
+  deterministic, version-controlled constant — no runtime sim cost, and any change to it shows up as
+  a reviewable diff. Regenerate with **`pnpm gen:prior`** (same seed → identical table; a test
+  asserts the committed artifact is up to date). This run's table (n=1000, seed=42): alzheimers 50.6s,
+  vascular/mixed/unspecified 60s, lewy/parkinsons 33.75s — a 2–4× lift over the 10–15s cold-start
+  base, well below the ~76–256s settled median and far below the 960s ceiling.
+- **Opt-in.** `warmStartDefaults(etiology, POPULATION_PRIOR)` is available for target construction but
+  nothing in `apps/web` consumes it yet; with no prior passed it is byte-for-byte `defaultsForEtiology`.
+
 ## Honest limitations
 
 - **The memory model is illustrative, not validated.** No real patient data informed the specific
@@ -138,6 +174,10 @@ anywhere, including a slide).
   vs. retrieval vs. attention).
 - **The pre-schedule daily cadence is a simulation choice**, not an engine rule — see "How it
   works" above.
+- **The starting-interval prior inherits every one of these limitations.** It is aggregated from
+  this same illustrative model, so it is a *prior, not proof* — a plausible warm-start nudge, never a
+  clinical claim that a given etiology "should" open at a given interval. Its constants (p25, the
+  min-sample cut-off) are modeling choices, and a different memory model would shift the table.
 - **An engine coupling this simulation surfaced — since resolved (PR #27):** `session.ts`'s
   `handleStartProbe` used to re-fire `endReason: "mastered"` on *every* distinct-day session-start
   recall after first mastery (it never guarded on `progress.mastered`), which discarded the
