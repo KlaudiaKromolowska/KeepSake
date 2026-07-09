@@ -1,4 +1,3 @@
-import { defaultsForEtiology } from "@keepsake/core/sr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import { AcquisitionChart } from "@/components/progress/acquisition-chart";
@@ -7,6 +6,7 @@ import { AffectChart } from "@/components/trends/affect-chart";
 import { BandChart, type BandRow } from "@/components/trends/band-chart";
 import type { ActivePatient } from "@/lib/patients/active";
 import { describeAcquisition, toAcquisitionSeries } from "@/lib/progress/series";
+import { srDefaultsForPatient } from "@/lib/sr/config";
 import type { Database } from "@/lib/supabase/database.types";
 import { PRACTICABLE_STATUSES } from "@/lib/targets/queue";
 import { TRENDS_COPY } from "@/lib/trends/copy";
@@ -24,11 +24,16 @@ export async function TrendsView({
   supabase,
   backHref,
   backLabel,
+  showExport = false,
 }: {
   patient: ActivePatient;
   supabase: SupabaseClient<Database>;
   backHref: string;
   backLabel: string;
+  // Off by default: the CSV export pulls this patient's raw practice data, so it belongs only on the
+  // caregiver's OWN /trends. The read-only clinician route reuses this view but must NOT expose it
+  // (data minimization — no exporting another user's raw data from the clinician surface).
+  showExport?: boolean;
 }) {
   const { data: targets, error: targetsErr } = await supabase
     .from("targets")
@@ -59,7 +64,7 @@ export async function TrendsView({
 
   const sessions = sessionsRes.data ?? [];
   const trials = trialsRes.data ?? [];
-  const { config } = defaultsForEtiology(patient.etiology);
+  const { config } = srDefaultsForPatient(patient.etiology);
 
   const perTarget = targets.map((t) => {
     const points = toAcquisitionSeries(
@@ -142,6 +147,15 @@ export async function TrendsView({
               </div>
             ))}
           </section>
+        )}
+
+        {showExport && (
+          <a
+            href="/api/export"
+            className="flex min-h-[48px] items-center rounded-xl border border-zinc-300 px-6 text-lg font-medium text-zinc-900 underline underline-offset-4 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+          >
+            {TRENDS_COPY.exportCsv}
+          </a>
         )}
 
         <Link

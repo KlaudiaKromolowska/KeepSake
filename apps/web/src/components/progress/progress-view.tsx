@@ -1,10 +1,10 @@
-import { defaultsForEtiology } from "@keepsake/core/sr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import { AcquisitionChart } from "@/components/progress/acquisition-chart";
 import type { ActivePatient } from "@/lib/patients/active";
 import { PROGRESS_COPY } from "@/lib/progress/copy";
 import { describeAcquisition, toAcquisitionSeries } from "@/lib/progress/series";
+import { srDefaultsForPatient } from "@/lib/sr/config";
 import type { Database } from "@/lib/supabase/database.types";
 
 /**
@@ -69,7 +69,7 @@ export async function ProgressView({
     trialsRes.data ?? [],
     patient.timezone,
   );
-  const { config } = defaultsForEtiology(patient.etiology);
+  const { config } = srDefaultsForPatient(patient.etiology);
   const summary = describeAcquisition(points, config.maxIntervalSec);
 
   if (points.length === 0 || summary === null) {

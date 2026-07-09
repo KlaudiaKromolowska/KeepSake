@@ -8,6 +8,7 @@ export const metadata = { title: "Trends — Keepsake" };
 /**
  * Self-referenced learning-dynamics trends for the caregiver's ACTIVE patient (multi-patient
  * switcher). All rendering lives in <TrendsView> so the read-only clinician route reuses it.
+ * `showExport` is on here (the caregiver's own data) and off on the clinician route.
  */
 export default async function TrendsPage() {
   const { user, supabase } = await requireUser();
@@ -28,5 +29,6 @@ export default async function TrendsPage() {
     supabase,
     backHref: "/dashboard",
     backLabel: TRENDS_COPY.backToHome,
+    showExport: true,
   });
 }

@@ -1,4 +1,10 @@
-import { defaultsForEtiology, nextIntervalSec, startSession } from "@keepsake/core/sr";
+import {
+  defaultsForEtiology,
+  nextIntervalSec,
+  POPULATION_PRIOR,
+  startSession,
+  warmStartDefaults,
+} from "@keepsake/core/sr";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { requireUser } from "@/lib/actions";
 import {
@@ -25,6 +31,7 @@ const config = defaultsForEtiology("alzheimers").config;
 const TARGET_ID = "22222222-2222-4222-8222-222222222222";
 const OTHER_TARGET_ID = "33333333-3333-4333-8333-333333333333";
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
+const TRIAL_ID = "44444444-4444-4444-8444-444444444444";
 
 /** Chainable, thenable Supabase stub. Every test supplies a `route(state)` → `{ data, error }`. */
 interface CallState {
@@ -32,6 +39,7 @@ interface CallState {
   verb?: "select" | "insert" | "update" | "upsert";
   filters: Record<string, unknown>;
   payload?: unknown;
+  upsertOpts?: unknown;
 }
 function makeSupabase(route: (s: CallState) => { data: unknown; error: unknown }) {
   const calls: CallState[] = [];
@@ -56,9 +64,10 @@ function makeSupabase(route: (s: CallState) => { data: unknown; error: unknown }
         state.payload = p;
         return b;
       },
-      upsert(p: unknown) {
+      upsert(p: unknown, opts?: unknown) {
         state.verb = "upsert";
         state.payload = p;
+        state.upsertOpts = opts;
         return b;
       },
       eq(k: string, v: unknown) {
@@ -172,6 +181,31 @@ describe("startSessionAction", () => {
     };
     expect(payload.summary.snapshot.phase).toBe("teach"); // first session
     expect(payload.summary.startProbe).toBe(false);
+  });
+
+  it("opens a fresh target at the etiology's population-prior warm-start base (not cold-start), bit-identical", async () => {
+    // End-to-end proof of the wiring: the running session config is recomputed from the patient's
+    // etiology + POPULATION_PRIOR at start (never persisted), so the fractional warm-start base is
+    // the exact same float the reducer resets/reverts to — the rescope float-equality holds.
+    const { client } = makeSupabase((s) => {
+      if (s.table === "targets") return { data: activeTarget, error: null };
+      if (s.table === "patients")
+        return { data: { timezone: TZ, etiology: "alzheimers" }, error: null };
+      if (s.table === "sessions" && s.verb === "select") return { data: null, error: null };
+      if (s.table === "target_state") return { data: null, error: null };
+      if (s.table === "sessions" && s.verb === "insert")
+        return { data: { id: "sess-new" }, error: null };
+      return { data: null, error: null };
+    });
+    mockUser(client);
+
+    const result = await startSessionAction({ targetId: TARGET_ID });
+
+    const expected = warmStartDefaults("alzheimers", POPULATION_PRIOR).config.baseIntervalSec;
+    expect(expected).toBe(50.625); // warm-start rung, above the 15s cold-start base
+    expect(expected).not.toBe(defaultsForEtiology("alzheimers").config.baseIntervalSec);
+    const actual = result.data?.config.baseIntervalSec;
+    expect(actual !== undefined && Object.is(actual, expected)).toBe(true);
   });
 
   it("same-day open session with valid snapshot → resume, resumed true, no insert", async () => {
@@ -406,13 +440,15 @@ describe("recordTrialAction", () => {
     const result = await recordTrialAction({
       sessionId: SESSION_ID,
       targetId: TARGET_ID,
+      trialId: TRIAL_ID,
       trial,
       snapshot: newSnap,
     });
 
     expect(result).toEqual({ data: null, error: null });
-    const ins = calls.find((c) => c.table === "trials" && c.verb === "insert");
+    const ins = calls.find((c) => c.table === "trials" && c.verb === "upsert");
     expect(ins?.payload).toEqual({
+      id: TRIAL_ID,
       session_id: SESSION_ID,
       target_id: TARGET_ID,
       interval_sec: 30,
@@ -421,6 +457,8 @@ describe("recordTrialAction", () => {
       corrected: false,
       at: new Date(NOW).toISOString(),
     });
+    // Idempotent-replay guard: onConflict "id" + ignoreDuplicates makes a queued retry a no-op.
+    expect(ins?.upsertOpts).toEqual({ onConflict: "id", ignoreDuplicates: true });
     const upd = calls.find((c) => c.table === "sessions" && c.verb === "update");
     const summary = (upd?.payload as { summary: Record<string, unknown> }).summary;
     expect(summary.snapshot).toEqual(newSnap); // snapshot replaced
@@ -428,12 +466,59 @@ describe("recordTrialAction", () => {
     expect(summary.note).toBe("keep");
   });
 
+  it("replaying the same trialId (queued retry) upserts onto the same row, not a second insert", async () => {
+    // Simulates an offline-queue replay: the exact same input (same client-generated trialId) is
+    // sent twice — once "lost" on the wire, once replayed after reconnect. A real Postgres
+    // upsert+ignoreDuplicates makes the second call a no-op on the trials row; this asserts the
+    // action issues the SAME dedupe-safe call shape both times (the guarantee the DB enforces).
+    const newSnap = snap({ phase: "distractor" });
+    const { client, calls } = makeSupabase((s) => {
+      if (s.table === "trials") return { data: null, error: null };
+      if (s.table === "sessions" && s.verb === "select")
+        return { data: { summary: { snapshot: { phase: "old" } } }, error: null };
+      if (s.table === "sessions" && s.verb === "update") return { data: null, error: null };
+      return { data: null, error: null };
+    });
+    mockUser(client);
+
+    const input = {
+      sessionId: SESSION_ID,
+      targetId: TARGET_ID,
+      trialId: TRIAL_ID,
+      trial,
+      snapshot: newSnap,
+    };
+    const first = await recordTrialAction(input);
+    const replay = await recordTrialAction(input); // identical payload, as a queued retry would send
+
+    expect(first).toEqual({ data: null, error: null });
+    expect(replay).toEqual({ data: null, error: null });
+    const upserts = calls.filter((c) => c.table === "trials" && c.verb === "upsert");
+    expect(upserts).toHaveLength(2);
+    expect(upserts[0]?.payload).toEqual(upserts[1]?.payload); // same row targeted both times
+    expect(upserts[0]?.upsertOpts).toEqual({ onConflict: "id", ignoreDuplicates: true });
+    expect(upserts[1]?.upsertOpts).toEqual({ onConflict: "id", ignoreDuplicates: true });
+  });
+
   it("rejects bad trial input with an error result", async () => {
     mockUser(makeSupabase(() => ({ data: null, error: null })).client);
     const result = await recordTrialAction({
       sessionId: SESSION_ID,
       targetId: TARGET_ID,
+      trialId: TRIAL_ID,
       trial: { ...trial, at: -1 },
+      snapshot: snap(),
+    });
+    expect(result.data).toBeNull();
+    expect(typeof result.error).toBe("string");
+  });
+
+  it("rejects a missing/non-uuid trialId (idempotency key is mandatory)", async () => {
+    mockUser(makeSupabase(() => ({ data: null, error: null })).client);
+    const result = await recordTrialAction({
+      sessionId: SESSION_ID,
+      targetId: TARGET_ID,
+      trial,
       snapshot: snap(),
     });
     expect(result.data).toBeNull();
@@ -448,6 +533,7 @@ describe("recordTrialAction", () => {
     await recordTrialAction({
       sessionId: SESSION_ID,
       targetId: TARGET_ID,
+      trialId: TRIAL_ID,
       trial: { ...trial, at: -1 },
       snapshot: snap({ startedDay: secretAnswer }),
     });
@@ -488,12 +574,13 @@ describe("recordTrialAction", () => {
     const result = await recordTrialAction({
       sessionId: SESSION_ID,
       targetId: TARGET_ID,
+      trialId: TRIAL_ID,
       trial: { ...trial, intervalSec: fractionalRungSec },
       snapshot: newSnap,
     });
 
     expect(result).toEqual({ data: null, error: null });
-    const ins = calls.find((c) => c.table === "trials" && c.verb === "insert");
+    const ins = calls.find((c) => c.table === "trials" && c.verb === "upsert");
     expect((ins?.payload as { interval_sec: number }).interval_sec).toBe(fractionalRungSec);
     const upd = calls.find((c) => c.table === "sessions" && c.verb === "update");
     const summary = (upd?.payload as { summary: Record<string, unknown> }).summary;

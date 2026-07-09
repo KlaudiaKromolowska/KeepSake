@@ -4,7 +4,6 @@ import {
   afterCeilingHandoff,
   afterMastery,
   canResume,
-  defaultsForEtiology,
   onBoosterOutcome,
   onSessionStartOutcome,
   resolvedStartProbeOutcome,
@@ -17,6 +16,7 @@ import {
 import type { z } from "zod";
 import type { ActionResult } from "@/lib/actions";
 import { failAction, requireUser } from "@/lib/actions";
+import { srDefaultsForPatient } from "@/lib/sr/config";
 import type { Json, Tables, TablesInsert } from "@/lib/supabase/database.types";
 import { PRACTICABLE_STATUSES } from "@/lib/targets/queue";
 import { aliasesFromJson } from "./grade-schema";
@@ -42,7 +42,7 @@ export interface StartSessionResult {
   sessionId: string;
   state: SessionState;
   target: SessionTarget;
-  config: ReturnType<typeof defaultsForEtiology>["config"];
+  config: ReturnType<typeof srDefaultsForPatient>["config"];
   resumed: boolean;
 }
 
@@ -126,7 +126,7 @@ export async function startSessionAction(
     return failAction("startSession: patient lookup", patientErr, "Could not start the session.");
   }
 
-  const { config } = defaultsForEtiology(patient.etiology);
+  const { config } = srDefaultsForPatient(patient.etiology);
   const now = Date.now();
   const sessionTarget: SessionTarget = {
     id: target.id,
@@ -222,19 +222,26 @@ export async function startSessionAction(
 export async function recordTrialAction(input: unknown): Promise<ActionResult<null>> {
   const parsed = recordTrialInputSchema.safeParse(input);
   if (!parsed.success) return { data: null, error: zerr(parsed.error.issues) };
-  const { sessionId, targetId, trial, snapshot } = parsed.data;
+  const { sessionId, targetId, trialId, trial, snapshot } = parsed.data;
 
   const { supabase } = await requireUser();
 
-  const { error: trialErr } = await supabase.from("trials").insert({
-    session_id: sessionId,
-    target_id: targetId,
-    interval_sec: trial.intervalSec,
-    outcome: trial.outcome,
-    is_screening: trial.isScreening,
-    corrected: trial.corrected,
-    at: iso(trial.at),
-  });
+  // Idempotent replay (offline queue, V3 — "never lose a trial"): `trialId` is client-generated
+  // and carried unchanged through a queued retry, so upserting on it with `ignoreDuplicates`
+  // makes a replay of an already-landed write a no-op instead of a second trial row.
+  const { error: trialErr } = await supabase.from("trials").upsert(
+    {
+      id: trialId,
+      session_id: sessionId,
+      target_id: targetId,
+      interval_sec: trial.intervalSec,
+      outcome: trial.outcome,
+      is_screening: trial.isScreening,
+      corrected: trial.corrected,
+      at: iso(trial.at),
+    },
+    { onConflict: "id", ignoreDuplicates: true },
+  );
   if (trialErr) return failAction("recordTrial: insert", trialErr, "Could not save that trial.");
 
   const { data: row, error: readErr } = await supabase
@@ -355,7 +362,7 @@ export async function endSessionAction(input: unknown): Promise<ActionResult<nul
   if (patientErr || !patient) {
     return failAction("endSession: patient", patientErr, "Could not close the session.");
   }
-  const { config } = defaultsForEtiology(patient.etiology);
+  const { config } = srDefaultsForPatient(patient.etiology);
 
   const { data: stateRow, error: stateReadErr } = await supabase
     .from("target_state")

@@ -160,6 +160,12 @@ describe("TrendsPage — populated data", () => {
     expect(html).toContain("check-in");
   });
 
+  it("renders a CSV export link pointing at the export route", async () => {
+    const html = await renderPage();
+    expect(html).toContain('href="/api/export"');
+    expect(html).toContain("Download practice data (CSV)");
+  });
+
   it("falls back to the affect-empty state when no session captured a tap", async () => {
     requireUserMock.mockResolvedValue({
       user: { id: "u1" },
