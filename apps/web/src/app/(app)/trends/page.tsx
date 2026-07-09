@@ -1,4 +1,3 @@
-import { defaultsForEtiology } from "@keepsake/core/sr";
 import Link from "next/link";
 import { AcquisitionChart } from "@/components/progress/acquisition-chart";
 import { SiteFooter } from "@/components/site-footer";
@@ -6,6 +5,7 @@ import { AffectChart } from "@/components/trends/affect-chart";
 import { BandChart, type BandRow } from "@/components/trends/band-chart";
 import { requireUser } from "@/lib/actions";
 import { describeAcquisition, toAcquisitionSeries } from "@/lib/progress/series";
+import { srDefaultsForPatient } from "@/lib/sr/config";
 import { PRACTICABLE_STATUSES } from "@/lib/targets/queue";
 import { TRENDS_COPY } from "@/lib/trends/copy";
 import { currentBand, toAffectSeries } from "@/lib/trends/series";
@@ -57,7 +57,7 @@ export default async function TrendsPage() {
 
   const sessions = sessionsRes.data ?? [];
   const trials = trialsRes.data ?? [];
-  const { config } = defaultsForEtiology(patient.etiology);
+  const { config } = srDefaultsForPatient(patient.etiology);
 
   const perTarget = targets.map((t) => {
     const points = toAcquisitionSeries(

@@ -1,4 +1,10 @@
-import { defaultsForEtiology, nextIntervalSec, startSession } from "@keepsake/core/sr";
+import {
+  defaultsForEtiology,
+  nextIntervalSec,
+  POPULATION_PRIOR,
+  startSession,
+  warmStartDefaults,
+} from "@keepsake/core/sr";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { requireUser } from "@/lib/actions";
 import {
@@ -172,6 +178,31 @@ describe("startSessionAction", () => {
     };
     expect(payload.summary.snapshot.phase).toBe("teach"); // first session
     expect(payload.summary.startProbe).toBe(false);
+  });
+
+  it("opens a fresh target at the etiology's population-prior warm-start base (not cold-start), bit-identical", async () => {
+    // End-to-end proof of the wiring: the running session config is recomputed from the patient's
+    // etiology + POPULATION_PRIOR at start (never persisted), so the fractional warm-start base is
+    // the exact same float the reducer resets/reverts to — the rescope float-equality holds.
+    const { client } = makeSupabase((s) => {
+      if (s.table === "targets") return { data: activeTarget, error: null };
+      if (s.table === "patients")
+        return { data: { timezone: TZ, etiology: "alzheimers" }, error: null };
+      if (s.table === "sessions" && s.verb === "select") return { data: null, error: null };
+      if (s.table === "target_state") return { data: null, error: null };
+      if (s.table === "sessions" && s.verb === "insert")
+        return { data: { id: "sess-new" }, error: null };
+      return { data: null, error: null };
+    });
+    mockUser(client);
+
+    const result = await startSessionAction({ targetId: TARGET_ID });
+
+    const expected = warmStartDefaults("alzheimers", POPULATION_PRIOR).config.baseIntervalSec;
+    expect(expected).toBe(50.625); // warm-start rung, above the 15s cold-start base
+    expect(expected).not.toBe(defaultsForEtiology("alzheimers").config.baseIntervalSec);
+    const actual = result.data?.config.baseIntervalSec;
+    expect(actual !== undefined && Object.is(actual, expected)).toBe(true);
   });
 
   it("same-day open session with valid snapshot → resume, resumed true, no insert", async () => {
