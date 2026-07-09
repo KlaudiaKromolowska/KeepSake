@@ -3,6 +3,7 @@ import { PatientSwitcher } from "@/components/patients/patient-switcher";
 import { SiteFooter } from "@/components/site-footer";
 import { requireUser } from "@/lib/actions";
 import { signOut } from "@/lib/auth/actions";
+import { CAPSULE_COPY } from "@/lib/capsules/copy";
 import { CLINICIAN_COPY } from "@/lib/clinicians/copy";
 import { listClinicianPatients } from "@/lib/clinicians/load";
 import { COACH_COPY } from "@/lib/coach/copy";
@@ -112,6 +113,16 @@ export default async function DashboardPage() {
           >
             <span className="text-2xl font-semibold">{TRENDS_COPY.title}</span>
             <span className="text-lg text-zinc-600">{TRENDS_COPY.cardHint}</span>
+          </Link>
+        )}
+
+        {activePatientId && (
+          <Link
+            href="/capsules"
+            className="flex min-h-[64px] w-full max-w-xl flex-col items-center gap-2 rounded-2xl border-2 border-zinc-900 bg-white px-8 py-6 text-center text-zinc-900 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+          >
+            <span className="text-2xl font-semibold">{CAPSULE_COPY.manage.cardTitle}</span>
+            <span className="text-lg text-zinc-600">{CAPSULE_COPY.manage.cardHint}</span>
           </Link>
         )}
 

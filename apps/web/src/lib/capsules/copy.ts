@@ -17,6 +17,8 @@ export const CAPSULE_COPY = {
     uploading: "Adding…",
     empty: "No capsules yet — add your first above.",
     remove: "Remove",
+    confirmRemove: "Yes, remove",
+    cancelRemove: "Keep it",
     removing: "Removing…",
     videoLabel: "Video",
     photoLabel: "Photo",
