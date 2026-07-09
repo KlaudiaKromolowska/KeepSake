@@ -67,13 +67,14 @@ describe("recognitionOptionsAction", () => {
     );
   });
 
-  it("also serves a between-mode (ceiling, not yet mastered) target", async () => {
+  it("returns null for a between-mode (ceiling, not yet mastered) target WITHOUT any AI spend", async () => {
+    // Therapeutic red line: a between-mode target still earns free-recall mastery on its session-start
+    // probe, so it must NOT be served recognition (that would let mastery be reached by recognition).
     mockUser({ target: { question: "Who calls?", answer: "David" }, scheduleMode: "between" });
-    assertAiQuotaMock.mockResolvedValue(undefined);
-    generateStructuredMock.mockResolvedValue({ lures: LURES });
 
-    const { data } = await recognitionOptionsAction("t1");
-    expect(data).toContain("David");
+    await expect(recognitionOptionsAction("t1")).resolves.toEqual({ data: null, error: null });
+    expect(assertAiQuotaMock).not.toHaveBeenCalled();
+    expect(generateStructuredMock).not.toHaveBeenCalled();
   });
 
   it("returns null for an acquisition target (no schedule) WITHOUT any AI spend", async () => {

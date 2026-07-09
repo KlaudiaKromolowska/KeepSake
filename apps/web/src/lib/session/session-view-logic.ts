@@ -25,10 +25,11 @@ export function recallCount(trials: readonly TrialRecord[]): number {
 
 /**
  * Recognition options to show for the current probe, or `undefined` for the free-recall probe.
- * Recognition is a MAINTENANCE/BOOSTER format only: it is offered ONLY on the session-start probe
- * (`isStartProbe`) and only when the server produced options (which it does only for a target in a
- * between/booster schedule). A reopened within-session retraining loop after a maintenance miss has
- * `isStartProbe === false`, so it reverts to free recall — acquisition is never affected.
+ * Recognition is a post-mastery BOOSTER format only: it is offered ONLY on the session-start probe
+ * (`isStartProbe`) and only when the server produced options (which it does only for a mastered
+ * target in the `booster` schedule — never `between`, which still earns free-recall mastery). A
+ * reopened within-session retraining loop after a booster miss has `isStartProbe === false`, so it
+ * reverts to free recall — acquisition and pre-mastery are never affected.
  */
 export function recognitionForProbe(
   state: SessionState,

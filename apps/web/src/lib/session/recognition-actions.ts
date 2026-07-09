@@ -10,9 +10,10 @@ const luresSchema = z.object({ lures: z.array(z.string()) });
 
 /**
  * Builds the recognition-probe options (the real answer + plausible lures, shuffled) for a target's
- * MAINTENANCE/BOOSTER session-start check. Gated by `target_state.schedule_mode`: recognition is a
- * maintenance format only, never acquisition, so a target with no between/booster schedule returns
- * `null` BEFORE any AI spend and the kiosk falls back to the free-recall probe. Like the distractor
+ * post-mastery BOOSTER session-start check. Gated by `target_state.schedule_mode === "booster"`:
+ * recognition is a post-mastery maintenance format only — never acquisition, never `between` mode
+ * (still earning free-recall mastery) — so any other mode returns `null` BEFORE any AI spend and the
+ * kiosk falls back to the free-recall probe. Like the distractor
  * fetch, this is invisible plumbing — ANY failure (no target, not in maintenance, quota exceeded, AI
  * unavailable, or a code-side validation reject) resolves to `{ data: null, error: null }` so the
  * caller silently degrades to free recall. Only call after an authenticated request.
@@ -31,8 +32,13 @@ export async function recognitionOptionsAction(targetId: string): Promise<{
       .maybeSingle();
     if (targetErr || !target) return { data: null, error: null };
 
-    // Maintenance/booster gate: recognition applies ONLY to a target already in the between-session
-    // or booster schedule. Acquisition (no schedule row / null mode) trains free recall — untouched.
+    // Post-mastery (booster) gate: recognition applies ONLY to an already-MASTERED target running
+    // its booster loop. It must NOT apply in `between` mode: a between-mode target is past the
+    // within-session ceiling but NOT yet mastered, so its session-start probe still advances the
+    // free-recall mastery streak (`handleStartProbe`, 3 distinct days). Serving recognition there
+    // would let a patient reach mastery by recognition instead of free recall — the therapeutic red
+    // line (mastery = free-recall session-start success, CLAUDE.md non-negotiables). Acquisition and
+    // between both fall back to the free-recall probe.
     const { data: stateRow, error: stateErr } = await supabase
       .from("target_state")
       .select("schedule_mode")
@@ -40,7 +46,7 @@ export async function recognitionOptionsAction(targetId: string): Promise<{
       .maybeSingle();
     if (stateErr) return { data: null, error: null };
     const mode = stateRow?.schedule_mode;
-    if (mode !== "between" && mode !== "booster") return { data: null, error: null };
+    if (mode !== "booster") return { data: null, error: null };
 
     await assertAiQuota(supabase, "recognition");
 
