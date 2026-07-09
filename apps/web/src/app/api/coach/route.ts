@@ -8,10 +8,13 @@ import { createClient } from "@/lib/supabase/server";
  * (one "coach" unit per turn). Returns JSON `{ reply, escalate }`.
  *
  * SAFETY DESIGN:
- * - Instructions live ONLY in COACH_SYSTEM (server-side, frozen). The caregiver's messages go in the
- *   user message as JSON-escaped, labeled DATA (buildCoachUserMessage) — so no message can rewrite
- *   the assistant's role or rules. This is the structural guardrail against prompt injection /
- *   "always reassure" steering; it holds regardless of what the caregiver types.
+ * - Instructions live ONLY in COACH_SYSTEM (server-side, frozen). The chat is stateless — the client
+ *   resends the full history every request — so the ENTIRE transcript (both `caregiver` and
+ *   `assistant` turns) goes in the user message as JSON-escaped, labeled DATA (buildCoachUserMessage)
+ *   — never just the caregiver's turns. Nothing server-side verifies a client-supplied `assistant`
+ *   turn was really produced by the model, so it gets no more trust than a caregiver turn: no turn,
+ *   however labeled, can rewrite the assistant's role or rules. This is the structural guardrail
+ *   against prompt injection / "always reassure" steering, including via a forged prior turn.
  * - The model output is validated against coachReplySchema by generateStructured BEFORE it reaches
  *   the client — a malformed/padded object throws (→ 503), never renders.
  * - Data minimization: only the caregiver's own typed conversation is sent to the model. NO patient
