@@ -58,6 +58,9 @@ export const recordTrialInputSchema = z
   .object({
     sessionId: z.string().uuid(),
     targetId: z.string().uuid(),
+    // Client-generated dedupe key (offline queue, V3): a replayed write reuses this id so a retry
+    // after a lost response upserts onto the SAME trial row instead of inserting a duplicate.
+    trialId: z.string().uuid(),
     trial: trialRecordSchema,
     snapshot: sessionStateSchema,
   })

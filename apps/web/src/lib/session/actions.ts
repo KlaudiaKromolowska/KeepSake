@@ -222,19 +222,26 @@ export async function startSessionAction(
 export async function recordTrialAction(input: unknown): Promise<ActionResult<null>> {
   const parsed = recordTrialInputSchema.safeParse(input);
   if (!parsed.success) return { data: null, error: zerr(parsed.error.issues) };
-  const { sessionId, targetId, trial, snapshot } = parsed.data;
+  const { sessionId, targetId, trialId, trial, snapshot } = parsed.data;
 
   const { supabase } = await requireUser();
 
-  const { error: trialErr } = await supabase.from("trials").insert({
-    session_id: sessionId,
-    target_id: targetId,
-    interval_sec: trial.intervalSec,
-    outcome: trial.outcome,
-    is_screening: trial.isScreening,
-    corrected: trial.corrected,
-    at: iso(trial.at),
-  });
+  // Idempotent replay (offline queue, V3 — "never lose a trial"): `trialId` is client-generated
+  // and carried unchanged through a queued retry, so upserting on it with `ignoreDuplicates`
+  // makes a replay of an already-landed write a no-op instead of a second trial row.
+  const { error: trialErr } = await supabase.from("trials").upsert(
+    {
+      id: trialId,
+      session_id: sessionId,
+      target_id: targetId,
+      interval_sec: trial.intervalSec,
+      outcome: trial.outcome,
+      is_screening: trial.isScreening,
+      corrected: trial.corrected,
+      at: iso(trial.at),
+    },
+    { onConflict: "id", ignoreDuplicates: true },
+  );
   if (trialErr) return failAction("recordTrial: insert", trialErr, "Could not save that trial.");
 
   const { data: row, error: readErr } = await supabase
