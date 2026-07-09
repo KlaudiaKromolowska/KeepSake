@@ -9,7 +9,7 @@ import { listClinicianPatients } from "@/lib/clinicians/load";
 import { COACH_COPY } from "@/lib/coach/copy";
 import { ETIOLOGY_COPY } from "@/lib/etiology/copy";
 import { ORG_COPY } from "@/lib/orgs/copy";
-import { listOwnedPatients } from "@/lib/patients/active";
+import { listOwnedPatients, resolveActivePatient } from "@/lib/patients/active";
 import { PROGRESS_COPY } from "@/lib/progress/copy";
 import { REVIEW_COPY } from "@/lib/review/copy";
 import { SCHEDULE_PLAN_COPY } from "@/lib/schedule/copy";
@@ -26,16 +26,21 @@ export const metadata = { title: "Dashboard — Keepsake" };
 export default async function DashboardPage() {
   const { user, supabase } = await requireUser();
 
-  // Multi-patient: the owned roster (switcher) and any patients shared WITH this user (clinician).
-  const [ownedPatients, sharedWithMe] = await Promise.all([
+  // Multi-patient: the owned roster (switcher), any patients shared WITH this user (clinician), and
+  // the active patient — resolved the SAME way `/capsules` resolves it (cookie-selected owned
+  // patient, else oldest owned), so the capsules card's visibility always matches what that page
+  // will actually load. Don't derive it separately (e.g. from `queue`, which exists for its own
+  // due-target purposes and can be null while an active patient still is not).
+  const [ownedPatients, sharedWithMe, activePatient] = await Promise.all([
     listOwnedPatients(supabase, user.id),
     listClinicianPatients(supabase, user.id),
+    resolveActivePatient(supabase, user.id),
   ]);
+  const activePatientId = activePatient?.id ?? null;
 
   // V2 multi-target: aggregate over every practicable target, then pick the one to open on (due
   // wins; acquisition wins ties). Best-effort — a read failure just yields no CTA, never a break.
   const queue = await loadQueue(supabase, user.id);
-  const activePatientId = queue?.patient.id ?? ownedPatients[0]?.id ?? null;
   const now = Date.now();
   const classified = queue ? classifyTargets(queue.targets, now, queue.patient.timezone) : [];
   const selectedId = queue ? selectSessionTarget(queue.targets, now, queue.patient.timezone) : null;

@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildUploadForm, submitRemove, submitUpload } from "./manage-form";
+import {
+  buildUploadForm,
+  confirmingIdAfterRemove,
+  submitRemove,
+  submitUpload,
+} from "./manage-form";
 
 const PATIENT = "11111111-1111-4111-8111-111111111111";
 const CAP = "22222222-2222-4222-8222-222222222222";
@@ -40,5 +45,15 @@ describe("submitRemove", () => {
 
     expect(res).toEqual({ data: null, error: null });
     expect(action).toHaveBeenCalledWith({ capsuleId: CAP });
+  });
+});
+
+describe("confirmingIdAfterRemove", () => {
+  it("clears confirmingId on a successful remove", () => {
+    expect(confirmingIdAfterRemove(CAP, null)).toBeNull();
+  });
+
+  it("keeps confirmingId on the failed item, so its error stays associated with it", () => {
+    expect(confirmingIdAfterRemove(CAP, "Something went wrong")).toBe(CAP);
   });
 });

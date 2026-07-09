@@ -34,3 +34,13 @@ export function submitRemove(
 ): Promise<ActionResult<null>> {
   return action({ capsuleId });
 }
+
+/**
+ * The `confirmingId` to hold after a remove attempt settles. On success it clears (the item is
+ * gone). On failure it stays on the capsule that failed, so the still-open confirm UI — and the
+ * error message rendered alongside it — stay associated with the item that actually failed, rather
+ * than being cleared before the error is known.
+ */
+export function confirmingIdAfterRemove(capsuleId: string, error: string | null): string | null {
+  return error === null ? null : capsuleId;
+}
