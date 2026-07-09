@@ -1,4 +1,3 @@
-import { defaultsForEtiology } from "@keepsake/core/sr";
 import Link from "next/link";
 import { requireUser } from "@/lib/actions";
 import { SCHEDULE_PLAN_COPY as C } from "@/lib/schedule/copy";
@@ -9,6 +8,7 @@ import {
   type SchedulePlan,
   schedulePlan,
 } from "@/lib/schedule/plan";
+import { srDefaultsForPatient } from "@/lib/sr/config";
 import { TARGETS_COPY } from "@/lib/targets/copy";
 import { classifyTargets, PRACTICABLE_STATUSES, type QueueTarget } from "@/lib/targets/queue";
 
@@ -64,7 +64,7 @@ export default async function SchedulePage() {
   if (rows.length === 0) return <Shell body={C.noTarget} />;
 
   const now = Date.now();
-  const { config } = defaultsForEtiology(patient.etiology);
+  const { config } = srDefaultsForPatient(patient.etiology);
 
   const queueTargets: QueueTarget[] = rows.map((r) => ({
     id: r.id,

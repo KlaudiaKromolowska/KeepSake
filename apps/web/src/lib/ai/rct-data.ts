@@ -8,7 +8,8 @@
  */
 
 import { type RctContext, serializeRctContext } from "@keepsake/core/prompts/rct-report";
-import { defaultsForEtiology, type Etiology } from "@keepsake/core/sr";
+import type { Etiology } from "@keepsake/core/sr";
+import { srDefaultsForPatient } from "@/lib/sr/config";
 import type {
   AnalyticsSession,
   AnalyticsTargetState,
@@ -137,7 +138,7 @@ export function buildRctInputs(raw: RctRawInputs): {
     ];
   });
 
-  const { config } = defaultsForEtiology(raw.patient.etiology as Etiology);
+  const { config } = srDefaultsForPatient(raw.patient.etiology as Etiology);
   const context = serializeRctContext({
     patientName: raw.patient.display_name,
     etiology: raw.patient.etiology,

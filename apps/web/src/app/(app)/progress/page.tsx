@@ -1,9 +1,9 @@
-import { defaultsForEtiology } from "@keepsake/core/sr";
 import Link from "next/link";
 import { AcquisitionChart } from "@/components/progress/acquisition-chart";
 import { requireUser } from "@/lib/actions";
 import { PROGRESS_COPY } from "@/lib/progress/copy";
 import { describeAcquisition, toAcquisitionSeries } from "@/lib/progress/series";
+import { srDefaultsForPatient } from "@/lib/sr/config";
 
 export const metadata = { title: "Progress — Keepsake" };
 
@@ -56,7 +56,7 @@ export default async function ProgressPage() {
     trialsRes.data ?? [],
     patient.timezone,
   );
-  const { config } = defaultsForEtiology(patient.etiology);
+  const { config } = srDefaultsForPatient(patient.etiology);
   const summary = describeAcquisition(points, config.maxIntervalSec);
 
   if (points.length === 0 || summary === null) {

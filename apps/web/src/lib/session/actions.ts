@@ -4,7 +4,6 @@ import {
   afterCeilingHandoff,
   afterMastery,
   canResume,
-  defaultsForEtiology,
   onBoosterOutcome,
   onSessionStartOutcome,
   resolvedStartProbeOutcome,
@@ -17,6 +16,7 @@ import {
 import type { z } from "zod";
 import type { ActionResult } from "@/lib/actions";
 import { failAction, requireUser } from "@/lib/actions";
+import { srDefaultsForPatient } from "@/lib/sr/config";
 import type { Json, Tables, TablesInsert } from "@/lib/supabase/database.types";
 import { PRACTICABLE_STATUSES } from "@/lib/targets/queue";
 import { aliasesFromJson } from "./grade-schema";
@@ -42,7 +42,7 @@ export interface StartSessionResult {
   sessionId: string;
   state: SessionState;
   target: SessionTarget;
-  config: ReturnType<typeof defaultsForEtiology>["config"];
+  config: ReturnType<typeof srDefaultsForPatient>["config"];
   resumed: boolean;
 }
 
@@ -126,7 +126,7 @@ export async function startSessionAction(
     return failAction("startSession: patient lookup", patientErr, "Could not start the session.");
   }
 
-  const { config } = defaultsForEtiology(patient.etiology);
+  const { config } = srDefaultsForPatient(patient.etiology);
   const now = Date.now();
   const sessionTarget: SessionTarget = {
     id: target.id,
@@ -355,7 +355,7 @@ export async function endSessionAction(input: unknown): Promise<ActionResult<nul
   if (patientErr || !patient) {
     return failAction("endSession: patient", patientErr, "Could not close the session.");
   }
-  const { config } = defaultsForEtiology(patient.etiology);
+  const { config } = srDefaultsForPatient(patient.etiology);
 
   const { data: stateRow, error: stateReadErr } = await supabase
     .from("target_state")
