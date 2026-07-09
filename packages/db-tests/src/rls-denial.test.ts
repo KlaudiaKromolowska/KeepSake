@@ -1034,3 +1034,421 @@ describe("RLS: read-only clinician view (clinician_patients)", () => {
     expect(after.data ?? []).toHaveLength(0);
   });
 });
+
+// Care-home multi-tenant (organizations / organization_members / patients.org_id) — PLAN §12 V3.
+// The whole isolation contract for the first B2B tenancy model, proved both directions:
+//   * org-A staff can READ + fully WRITE (run sessions, manage targets) org-A patients (positive),
+//   * org-A staff can NEVER read or write an org-B patient, and vice-versa (org <-> org, both ways),
+//   * org staff can NEVER touch a solo caregiver's patient, and a solo caregiver can never touch an
+//     org patient (org <-> solo, both ways),
+//   * a non-member cannot read an organization, its roster, or its members' membership rows,
+//   * NO privilege escalation: self-add, self-promote, non-admin add, cross-admin add, non-admin
+//     org-patient creation, and caregiver-injects-own-patient-into-an-org are all denied,
+//   * membership lifecycle: an admin CAN add a member; a member CAN leave and immediately loses read.
+describe("RLS: care-home multi-tenant (organizations)", () => {
+  interface OrgUser {
+    id: string;
+    email: string;
+    client: SupabaseClient;
+  }
+  interface OrgFixture {
+    admin: OrgUser;
+    staff: OrgUser;
+    orgId: string;
+    patientId: string;
+    targetId: string;
+    sessionId: string;
+    trialId: string;
+  }
+
+  const createdUserIds: string[] = [];
+  const createdOrgIds: string[] = [];
+  let orgA: OrgFixture;
+  let orgB: OrgFixture;
+
+  async function makeUser(tag: string): Promise<OrgUser> {
+    const email = `${tag}-${randomUUID()}@keepsake.test`;
+    const password = `Aa1-${randomUUID()}`;
+    const { data, error } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (error || !data.user) throw new Error(`createUser ${tag} failed: ${error?.message}`);
+    createdUserIds.push(data.user.id);
+    const client = await signInClient(email, password);
+    return { id: data.user.id, email, client };
+  }
+
+  // Build one tenant: an admin (creates the org via the bootstrap RPC), a staff member (added by the
+  // admin), an org-owned patient (admin insert: caregiver_id NULL, org_id set), and a clinical row on
+  // every child table. Child rows are seeded via the service role for determinism; staff read/write
+  // capability is then asserted explicitly in the positive-control test.
+  async function makeOrg(tag: string): Promise<OrgFixture> {
+    const orgAdmin = await makeUser(`${tag}admin`);
+    const staff = await makeUser(`${tag}staff`);
+
+    const { data: orgId, error: orgErr } = await orgAdmin.client.rpc("create_organization", {
+      p_name: `Care Home ${tag}`,
+    });
+    if (orgErr || !orgId) throw new Error(`create_organization ${tag} failed: ${orgErr?.message}`);
+    createdOrgIds.push(orgId as string);
+
+    const { error: addErr } = await orgAdmin.client.rpc("add_org_member", {
+      p_org_id: orgId as string,
+      p_email: staff.email,
+      p_role: "staff",
+    });
+    if (addErr) throw new Error(`add_org_member ${tag} failed: ${addErr.message}`);
+
+    // Org patient: created by the admin, owned by the ORG (no personal caregiver_id).
+    const { data: patient, error: patientErr } = await orgAdmin.client
+      .from("patients")
+      .insert({ org_id: orgId as string, display_name: `Org ${tag} patient`, timezone: "UTC" })
+      .select("id")
+      .single();
+    if (patientErr || !patient)
+      throw new Error(`org patient ${tag} failed: ${patientErr?.message}`);
+
+    const { data: target, error: targetErr } = await admin
+      .from("targets")
+      .insert({ patient_id: patient.id, question: "seed q", answer: "seed a" })
+      .select("id")
+      .single();
+    if (targetErr || !target) throw new Error(`org target ${tag} failed: ${targetErr?.message}`);
+
+    const { data: session, error: sessionErr } = await admin
+      .from("sessions")
+      .insert({ patient_id: patient.id, started_at: new Date().toISOString() })
+      .select("id")
+      .single();
+    if (sessionErr || !session)
+      throw new Error(`org session ${tag} failed: ${sessionErr?.message}`);
+
+    const { data: trial, error: trialErr } = await admin
+      .from("trials")
+      .insert({
+        session_id: session.id,
+        target_id: target.id,
+        interval_sec: 30,
+        outcome: "recall",
+        at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    if (trialErr || !trial) throw new Error(`org trial ${tag} failed: ${trialErr?.message}`);
+
+    const { error: stateErr } = await admin.from("target_state").insert({ target_id: target.id });
+    if (stateErr) throw new Error(`org target_state ${tag} failed: ${stateErr.message}`);
+
+    const { error: consentErr } = await admin
+      .from("consent")
+      .insert({ patient_id: patient.id, patient_consent: true, caregiver_role_ack: true });
+    if (consentErr) throw new Error(`org consent ${tag} failed: ${consentErr.message}`);
+
+    return {
+      admin: orgAdmin,
+      staff,
+      orgId: orgId as string,
+      patientId: patient.id,
+      targetId: target.id,
+      sessionId: session.id,
+      trialId: trial.id,
+    };
+  }
+
+  // Every clinical child table reachable through an org grant, with the column each is keyed on and
+  // how to pull the id from a fixture.
+  const sharedTables = [
+    ["patients", "id", (o: OrgFixture) => o.patientId],
+    ["targets", "id", (o: OrgFixture) => o.targetId],
+    ["sessions", "id", (o: OrgFixture) => o.sessionId],
+    ["trials", "id", (o: OrgFixture) => o.trialId],
+    ["target_state", "target_id", (o: OrgFixture) => o.targetId],
+    ["consent", "patient_id", (o: OrgFixture) => o.patientId],
+  ] as const;
+
+  beforeAll(async () => {
+    orgA = await makeOrg("A");
+    orgB = await makeOrg("B");
+  }, 60000);
+
+  afterAll(async () => {
+    // Org patients don't cascade from a user delete (caregiver_id is NULL), and organizations have no
+    // FK to auth.users — so remove them explicitly. Deleting the org cascades organization_members.
+    if (createdOrgIds.length > 0) {
+      await admin.from("patients").delete().in("org_id", createdOrgIds);
+      await admin.from("organizations").delete().in("id", createdOrgIds);
+    }
+    for (const id of createdUserIds) {
+      try {
+        await admin.auth.admin.deleteUser(id);
+      } catch (err) {
+        console.warn(
+          `org user cleanup failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  }, 30000);
+
+  it("positive control: org-A staff can READ every clinical row of an org-A patient", async () => {
+    for (const [table, col, id] of sharedTables) {
+      const res = await orgA.staff.client.from(table).select(col).eq(col, id(orgA));
+      expect(res.error).toBeNull();
+      expect(res.data ?? []).toHaveLength(1);
+    }
+  });
+
+  it("positive control: org-A staff have FULL care-delivery write on an org-A patient", async () => {
+    // Insert a target, update it, insert a session + trial against it — the "run sessions, manage
+    // targets" surface — all as a plain staff member on the RLS user client.
+    const ins = await orgA.staff.client
+      .from("targets")
+      .insert({ patient_id: orgA.patientId, question: "staff q", answer: "staff a" })
+      .select("id")
+      .single();
+    expect(ins.error).toBeNull();
+    const newTargetId = ins.data?.id as string;
+    expect(newTargetId).toBeTruthy();
+
+    const upd = await orgA.staff.client
+      .from("targets")
+      .update({ question: "staff q edited" })
+      .eq("id", newTargetId)
+      .select("id");
+    expect(upd.data ?? []).toHaveLength(1);
+
+    const sess = await orgA.staff.client
+      .from("sessions")
+      .insert({ patient_id: orgA.patientId, started_at: new Date().toISOString() })
+      .select("id")
+      .single();
+    expect(sess.error).toBeNull();
+    const newSessionId = sess.data?.id as string;
+
+    const trial = await orgA.staff.client
+      .from("trials")
+      .insert({
+        session_id: newSessionId,
+        target_id: newTargetId,
+        interval_sec: 20,
+        outcome: "recall",
+        at: new Date().toISOString(),
+      })
+      .select("id");
+    expect(trial.error).toBeNull();
+    expect(trial.data ?? []).toHaveLength(1);
+
+    const del = await orgA.staff.client.from("targets").delete().eq("id", newTargetId).select("id");
+    expect(del.data ?? []).toHaveLength(1); // cascades the trial+session cleanup via service role below
+    await admin.from("sessions").delete().eq("id", newSessionId);
+  });
+
+  it("positive control: an admin CAN read the org and list its roster", async () => {
+    const org = await orgA.admin.client.from("organizations").select("id").eq("id", orgA.orgId);
+    expect(org.data ?? []).toHaveLength(1);
+
+    const roster = await orgA.admin.client.rpc("list_org_members", { p_org_id: orgA.orgId });
+    expect(roster.error).toBeNull();
+    const ids = ((roster.data ?? []) as { user_id: string }[]).map((r) => r.user_id);
+    expect(ids).toContain(orgA.admin.id);
+    expect(ids).toContain(orgA.staff.id);
+  });
+
+  // ---- org <-> org isolation (both directions) ----
+
+  it("org <-> org SELECT: staff cannot read the OTHER org's patient rows (both directions)", async () => {
+    for (const [table, col, id] of sharedTables) {
+      const bReadsA = await orgB.staff.client.from(table).select(col).eq(col, id(orgA));
+      expect(bReadsA.error).toBeNull();
+      expect(bReadsA.data ?? []).toHaveLength(0);
+
+      const aReadsB = await orgA.staff.client.from(table).select(col).eq(col, id(orgB));
+      expect(aReadsB.error).toBeNull();
+      expect(aReadsB.data ?? []).toHaveLength(0);
+    }
+    // Nor via an unfiltered scan: org B's patient must never surface for an org-A member.
+    const scan = await orgA.staff.client.from("patients").select("id");
+    const ids = (scan.data ?? []).map((r) => (r as { id: string }).id);
+    expect(ids).toContain(orgA.patientId);
+    expect(ids).not.toContain(orgB.patientId);
+  });
+
+  it("org <-> org INSERT: staff cannot insert into the OTHER org's patient (42501, nothing persists)", async () => {
+    const marker = { patient_id: orgA.patientId, question: `x-${randomUUID()}` };
+    const { error } = await orgB.staff.client.from("targets").insert({ ...marker, answer: "x" });
+    expect(error?.code).toBe("42501");
+    const persisted = await admin.from("targets").select("id").match(marker);
+    expect(persisted.data ?? []).toHaveLength(0);
+  });
+
+  it("org <-> org UPDATE/DELETE: staff writes to the OTHER org's rows affect 0 rows", async () => {
+    const upd = await orgB.staff.client
+      .from("targets")
+      .update({ question: "hijacked" })
+      .eq("id", orgA.targetId)
+      .select("id");
+    expect(upd.data ?? []).toHaveLength(0);
+
+    const del = await orgB.staff.client
+      .from("targets")
+      .delete()
+      .eq("id", orgA.targetId)
+      .select("id");
+    expect(del.data ?? []).toHaveLength(0);
+
+    const check = await admin.from("targets").select("question").eq("id", orgA.targetId).single();
+    expect(check.data?.question).not.toBe("hijacked");
+  });
+
+  it("org <-> org: staff cannot see the OTHER org, its roster, or its membership rows", async () => {
+    const org = await orgB.staff.client.from("organizations").select("id").eq("id", orgA.orgId);
+    expect(org.data ?? []).toHaveLength(0);
+
+    const members = await orgB.staff.client
+      .from("organization_members")
+      .select("user_id")
+      .eq("org_id", orgA.orgId);
+    expect(members.data ?? []).toHaveLength(0);
+
+    const roster = await orgB.staff.client.rpc("list_org_members", { p_org_id: orgA.orgId });
+    expect(roster.error?.code).toBe("42501");
+  });
+
+  // ---- org <-> solo isolation (both directions) ----
+
+  it("org <-> solo: org staff cannot read a solo caregiver's patient (graphA)", async () => {
+    const byId = await orgA.staff.client.from("patients").select("id").eq("id", graphA.patientId);
+    expect(byId.data ?? []).toHaveLength(0);
+
+    const target = await orgA.staff.client.from("targets").select("id").eq("id", graphA.targetId);
+    expect(target.data ?? []).toHaveLength(0);
+  });
+
+  it("org <-> solo: a solo caregiver cannot read an org patient", async () => {
+    const byId = await clientA.from("patients").select("id").eq("id", orgA.patientId);
+    expect(byId.data ?? []).toHaveLength(0);
+
+    const target = await clientA.from("targets").select("id").eq("id", orgA.targetId);
+    expect(target.data ?? []).toHaveLength(0);
+
+    // A solo caregiver is a member of no org, so the organizations table is empty for them.
+    const orgs = await clientA.from("organizations").select("id").eq("id", orgA.orgId);
+    expect(orgs.data ?? []).toHaveLength(0);
+  });
+
+  // ---- no privilege escalation ----
+
+  it("escalation: a staff member cannot self-add to another org (42501, nothing persists)", async () => {
+    const marker = { org_id: orgA.orgId, user_id: orgB.staff.id };
+    const { error } = await orgB.staff.client
+      .from("organization_members")
+      .insert({ ...marker, role: "admin" });
+    expect(error?.code).toBe("42501");
+    const persisted = await admin.from("organization_members").select("user_id").match(marker);
+    expect(persisted.data ?? []).toHaveLength(0);
+  });
+
+  it("escalation: a staff member cannot self-promote to admin (0 rows; role unchanged)", async () => {
+    const upd = await orgA.staff.client
+      .from("organization_members")
+      .update({ role: "admin" })
+      .eq("org_id", orgA.orgId)
+      .eq("user_id", orgA.staff.id)
+      .select("user_id");
+    expect(upd.data ?? []).toHaveLength(0);
+
+    const check = await admin
+      .from("organization_members")
+      .select("role")
+      .eq("org_id", orgA.orgId)
+      .eq("user_id", orgA.staff.id)
+      .single();
+    expect(check.data?.role).toBe("staff");
+  });
+
+  it("escalation: a non-admin member cannot add_org_member (42501)", async () => {
+    const res = await orgA.staff.client.rpc("add_org_member", {
+      p_org_id: orgA.orgId,
+      p_email: orgB.staff.email,
+      p_role: "staff",
+    });
+    expect(res.error?.code).toBe("42501");
+  });
+
+  it("escalation: an admin of one org cannot add members to another org (42501)", async () => {
+    const res = await orgB.admin.client.rpc("add_org_member", {
+      p_org_id: orgA.orgId,
+      p_email: orgB.staff.email,
+      p_role: "staff",
+    });
+    expect(res.error?.code).toBe("42501");
+    const persisted = await admin
+      .from("organization_members")
+      .select("user_id")
+      .match({ org_id: orgA.orgId, user_id: orgB.staff.id });
+    expect(persisted.data ?? []).toHaveLength(0);
+  });
+
+  it("escalation: a non-admin member cannot create an org patient (42501, nothing persists)", async () => {
+    const marker = { org_id: orgA.orgId, display_name: `staff-created-${randomUUID()}` };
+    const { error } = await orgA.staff.client
+      .from("patients")
+      .insert({ ...marker, timezone: "UTC" });
+    expect(error?.code).toBe("42501");
+    const persisted = await admin.from("patients").select("id").match(marker);
+    expect(persisted.data ?? []).toHaveLength(0);
+  });
+
+  it("escalation: a caregiver cannot inject their OWN patient into an org (insert or re-tag)", async () => {
+    // (i) Insert a fresh patient carrying both caregiver_id (self) and org_id (an org they don't
+    // administer): the caregiver policy's WITH CHECK now requires org_id IS NULL, and the org-insert
+    // policy requires caregiver_id IS NULL + admin — neither matches, so 42501, nothing persists.
+    const marker = { caregiver_id: graphA.userId, display_name: `inject-${randomUUID()}` };
+    const ins = await clientA
+      .from("patients")
+      .insert({ ...marker, org_id: orgA.orgId, timezone: "UTC" });
+    expect(ins.error?.code).toBe("42501");
+    expect((await admin.from("patients").select("id").match(marker)).data ?? []).toHaveLength(0);
+
+    // (ii) Re-tag an EXISTING owned solo patient into the org: the tightened WITH CHECK denies it, so
+    // 0 rows change and org_id stays NULL — the org never gains the patient.
+    const upd = await clientA
+      .from("patients")
+      .update({ org_id: orgA.orgId })
+      .eq("id", graphA.patientId)
+      .select("id");
+    expect(upd.data ?? []).toHaveLength(0);
+    const check = await admin.from("patients").select("org_id").eq("id", graphA.patientId).single();
+    expect(check.data?.org_id).toBeNull();
+  });
+
+  // ---- membership lifecycle ----
+
+  it("lifecycle: an admin can add a member, and that member can leave and loses read access", async () => {
+    const joiner = await makeUser("Ajoin");
+    const add = await orgA.admin.client.rpc("add_org_member", {
+      p_org_id: orgA.orgId,
+      p_email: joiner.email,
+      p_role: "staff",
+    });
+    expect(add.error).toBeNull();
+
+    // Now a member, the joiner can read the org patient.
+    const before = await joiner.client.from("patients").select("id").eq("id", orgA.patientId);
+    expect(before.data ?? []).toHaveLength(1);
+
+    // The joiner leaves (deletes their own membership row) — allowed by the DELETE policy.
+    const leave = await joiner.client
+      .from("organization_members")
+      .delete()
+      .eq("org_id", orgA.orgId)
+      .eq("user_id", joiner.id)
+      .select("user_id");
+    expect(leave.data ?? []).toHaveLength(1);
+
+    // Read access is gone immediately.
+    const after = await joiner.client.from("patients").select("id").eq("id", orgA.patientId);
+    expect(after.data ?? []).toHaveLength(0);
+  });
+});
