@@ -22,6 +22,7 @@
     "record-fixtures.ts",
     "generate-audio.ts",
     "simulate.ts",
+    "gen-population-prior.ts",
     "svg-chart.ts"
   ]
 }
