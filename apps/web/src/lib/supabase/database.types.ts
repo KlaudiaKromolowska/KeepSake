@@ -178,41 +178,102 @@ export type Database = {
           },
         ];
       };
+      organization_members: {
+        Row: {
+          created_at: string;
+          org_id: string;
+          role: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          org_id: string;
+          role?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          org_id?: string;
+          role?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "organization_members_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      organizations: {
+        Row: {
+          created_at: string;
+          id: string;
+          name: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          name: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          name?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       patients: {
         Row: {
-          caregiver_id: string;
+          caregiver_id: string | null;
           created_at: string;
           display_name: string;
           etiology: Database["public"]["Enums"]["etiology"];
           id: string;
           is_demo: boolean;
           notes: string | null;
+          org_id: string | null;
           timezone: string;
           updated_at: string;
         };
         Insert: {
-          caregiver_id: string;
+          caregiver_id?: string | null;
           created_at?: string;
           display_name: string;
           etiology?: Database["public"]["Enums"]["etiology"];
           id?: string;
           is_demo?: boolean;
           notes?: string | null;
+          org_id?: string | null;
           timezone: string;
           updated_at?: string;
         };
         Update: {
-          caregiver_id?: string;
+          caregiver_id?: string | null;
           created_at?: string;
           display_name?: string;
           etiology?: Database["public"]["Enums"]["etiology"];
           id?: string;
           is_demo?: boolean;
           notes?: string | null;
+          org_id?: string | null;
           timezone?: string;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "patients_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       sessions: {
         Row: {
@@ -429,8 +490,19 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      add_org_member: {
+        Args: { p_email: string; p_org_id: string; p_role?: string };
+        Returns: string;
+      };
       ai_calls_today: { Args: never; Returns: number };
+      create_organization: { Args: { p_name: string }; Returns: string };
       is_clinician_for: { Args: { p_patient_id: string }; Returns: boolean };
+      is_org_admin: { Args: { p_org_id: string }; Returns: boolean };
+      is_org_member: { Args: { p_org_id: string }; Returns: boolean };
+      is_org_member_of_patient: {
+        Args: { p_patient_id: string };
+        Returns: boolean;
+      };
       link_clinician: {
         Args: { p_clinician_email: string; p_patient_id: string };
         Returns: string;
@@ -441,6 +513,15 @@ export type Database = {
           clinician_id: string;
           created_at: string;
           email: string;
+        }[];
+      };
+      list_org_members: {
+        Args: { p_org_id: string };
+        Returns: {
+          created_at: string;
+          email: string;
+          role: string;
+          user_id: string;
         }[];
       };
     };

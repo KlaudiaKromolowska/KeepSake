@@ -8,6 +8,7 @@ import { CLINICIAN_COPY } from "@/lib/clinicians/copy";
 import { listClinicianPatients } from "@/lib/clinicians/load";
 import { COACH_COPY } from "@/lib/coach/copy";
 import { ETIOLOGY_COPY } from "@/lib/etiology/copy";
+import { ORG_COPY } from "@/lib/orgs/copy";
 import { listOwnedPatients } from "@/lib/patients/active";
 import { PROGRESS_COPY } from "@/lib/progress/copy";
 import { REVIEW_COPY } from "@/lib/review/copy";
@@ -168,6 +169,13 @@ export default async function DashboardPage() {
             {CLINICIAN_COPY.view.title}
           </Link>
         )}
+
+        <Link
+          href="/orgs"
+          className="flex min-h-[48px] items-center text-lg text-zinc-600 underline underline-offset-4 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+        >
+          {ORG_COPY.list.title}
+        </Link>
 
         <form action={signOut}>
           <button
