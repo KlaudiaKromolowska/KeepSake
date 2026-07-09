@@ -13,7 +13,7 @@ export const POPULATION_PRIOR: PopulationPrior = {
     n: 1000,
     seed: 42,
     horizonDays: 90,
-    generatedAt: "2026-07-09T09:07:42.472Z",
+    generatedAt: "2026-07-09T09:28:42.035Z",
     percentile: 0.25,
     minSample: 20,
     source:
@@ -22,32 +22,32 @@ export const POPULATION_PRIOR: PopulationPrior = {
   byEtiology: {
     vascular: {
       startIntervalSec: 60,
-      sampleSize: 36,
+      sampleSize: 40,
       rawPercentileSec: 60,
     },
     alzheimers: {
       startIntervalSec: 50.625,
-      sampleSize: 59,
+      sampleSize: 55,
       rawPercentileSec: 50.625,
     },
     lewy: {
       startIntervalSec: 33.75,
-      sampleSize: 34,
+      sampleSize: 35,
       rawPercentileSec: 33.75,
     },
     unspecified: {
       startIntervalSec: 60,
-      sampleSize: 45,
+      sampleSize: 41,
       rawPercentileSec: 60,
     },
     parkinsons: {
-      startIntervalSec: 33.75,
+      startIntervalSec: 50.625,
       sampleSize: 38,
-      rawPercentileSec: 33.75,
+      rawPercentileSec: 50.625,
     },
     mixed: {
       startIntervalSec: 60,
-      sampleSize: 27,
+      sampleSize: 24,
       rawPercentileSec: 60,
     },
   },
