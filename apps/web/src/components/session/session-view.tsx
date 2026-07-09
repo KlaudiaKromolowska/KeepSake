@@ -3,8 +3,8 @@
 import type { SessionEvent, SessionState } from "@keepsake/core/sr";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ActionResult } from "@/lib/actions";
 import { useNarration } from "@/lib/audio/use-narration";
+import { useOfflineQueue } from "@/lib/offline/use-offline-queue";
 import {
   annotateSessionAction,
   endSessionAction,
@@ -145,25 +145,10 @@ function RunningSession({
   const targetId = target.id;
 
   const prevStateRef = useRef<SessionState>(result.state);
-  const retryQueueRef = useRef<Array<() => Promise<ActionResult<null>>>>([]);
-  const [pendingSaves, setPendingSaves] = useState(0);
-
-  const runFailable = useCallback(async (fn: () => Promise<ActionResult<null>>) => {
-    if (!(await attemptSave(fn))) {
-      retryQueueRef.current.push(fn);
-      setPendingSaves(retryQueueRef.current.length);
-    }
-  }, []);
-
-  const retrySaves = useCallback(async () => {
-    const items = retryQueueRef.current;
-    retryQueueRef.current = [];
-    setPendingSaves(0);
-    for (const fn of items) {
-      if (!(await attemptSave(fn))) retryQueueRef.current.push(fn);
-    }
-    setPendingSaves(retryQueueRef.current.length);
-  }, []);
+  // Durable, online-first offline queue (V3 — never lose a trial): tries the network first, and
+  // only falls back to an IndexedDB-backed queue (flushed on reconnect / manual retry) on
+  // failure, so a caregiver never silently loses a recorded outcome to flaky care-home Wi-Fi.
+  const offlineQueue = useOfflineQueue();
 
   const onChange = useCallback(
     (state: SessionState, event: SessionEvent) => {
@@ -188,17 +173,32 @@ function RunningSession({
       void (async () => {
         if (trialAdded(prev, state)) {
           const trial = state.trials.at(-1);
-          if (trial)
-            await runFailable(() =>
-              recordTrialAction({ sessionId, targetId, trial, snapshot: state }),
+          if (trial) {
+            // trialId is the idempotency key: generated once here and reused verbatim on any
+            // queued replay, so a retry after a lost response upserts onto the same row.
+            const input = {
+              sessionId,
+              targetId,
+              trialId: crypto.randomUUID(),
+              trial,
+              snapshot: state,
+            };
+            await offlineQueue.save(
+              { id: input.trialId, action: "recordTrial", input, enqueuedAt: Date.now() },
+              () => recordTrialAction(input),
             );
+          }
         }
         if (state.phase === "ended") {
-          await runFailable(() => endSessionAction({ sessionId, targetId, snapshot: state }));
+          const input = { sessionId, targetId, snapshot: state };
+          await offlineQueue.save(
+            { id: `${sessionId}:end`, action: "endSession", input, enqueuedAt: Date.now() },
+            () => endSessionAction(input),
+          );
         }
       })();
     },
-    [sessionId, targetId, runFailable],
+    [sessionId, targetId, offlineQueue],
   );
 
   const handle = useSessionRunner(result.state, config, demoSpeed, onChange);
@@ -227,7 +227,7 @@ function RunningSession({
   return (
     <div ref={screenRef}>
       <NarrationToggle muted={narration.muted} onToggle={narration.toggleMuted} />
-      {pendingSaves > 0 && (
+      {offlineQueue.pendingCount > 0 && (
         <div
           role="alert"
           className="sticky top-0 z-10 flex flex-wrap items-center justify-center gap-4 bg-amber-100 px-6 py-3 text-xl text-amber-900"
@@ -235,7 +235,7 @@ function RunningSession({
           {SESSION_COPY.shared.saveError}
           <button
             type="button"
-            onClick={retrySaves}
+            onClick={() => void offlineQueue.retry()}
             className="min-h-[64px] rounded-2xl border-2 border-amber-800 bg-white px-6 text-xl font-medium text-amber-900 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
           >
             {SESSION_COPY.shared.retry}
