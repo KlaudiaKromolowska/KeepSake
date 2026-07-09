@@ -22,6 +22,7 @@ interface Graph {
   targetId: string;
   sessionId: string;
   trialId: string;
+  capsuleId: string;
   auditLogId: number;
   aiUsageId: string;
 }
@@ -162,6 +163,20 @@ async function seedGraph(email: string, password: string): Promise<Graph> {
     .insert({ target_id: target.id });
   if (targetStateErr) throw new Error(`seed target_state failed: ${targetStateErr.message}`);
 
+  // A family memory capsule (PLAN §12 V2) — family-private media, no clinician visibility.
+  const { data: capsule, error: capsuleErr } = await admin
+    .from("memory_capsules")
+    .insert({
+      patient_id: patient.id,
+      created_by: userId,
+      storage_path: `${userId}/${randomUUID()}.jpg`,
+      kind: "photo",
+    })
+    .select("id")
+    .single();
+  if (capsuleErr || !capsule)
+    throw new Error(`seed memory_capsules failed: ${capsuleErr?.message}`);
+
   const { error: consentErr } = await admin
     .from("consent")
     .insert({ patient_id: patient.id, patient_consent: true, caregiver_role_ack: true });
@@ -189,6 +204,7 @@ async function seedGraph(email: string, password: string): Promise<Graph> {
     targetId: target.id,
     sessionId: session.id,
     trialId: trial.id,
+    capsuleId: capsule.id,
     auditLogId: auditLog.id,
     aiUsageId: aiUsage.id,
   };
@@ -380,6 +396,47 @@ const tableSpecs: TableSpec[] = [
       at: new Date().toISOString(),
     }),
     updatePatch: { outcome: "miss" },
+  },
+  {
+    // memory_capsules: family-private media (PLAN §12 V2). Owned through patients (caregiver owns
+    // rows for their own patient); insert also requires created_by = auth.uid(). NO clinician SELECT
+    // policy (asserted separately in the clinician block).
+    table: "memory_capsules",
+    pk: "id",
+    ownRowId: (g) => g.capsuleId,
+    readableByOwner: true,
+    ownerCanMutate: true,
+    insertOwn: async (client, g) =>
+      await client
+        .from("memory_capsules")
+        .insert({
+          patient_id: g.patientId,
+          created_by: g.userId,
+          storage_path: `${g.userId}/${randomUUID()}.jpg`,
+          kind: "photo",
+        })
+        .select("id")
+        .single(),
+    insertCross: async (client, attacker, victim) => {
+      // created_by is the attacker's OWN uid (so the created_by = auth.uid() clause passes), but the
+      // patient belongs to the victim → the patients-ownership EXISTS clause fails → 42501. This
+      // pins the denial to the patient boundary, not merely a created_by mismatch.
+      const marker = { storage_path: `${attacker.userId}/${randomUUID()}.jpg` };
+      const { error } = await client.from("memory_capsules").insert({
+        patient_id: victim.patientId,
+        created_by: attacker.userId,
+        kind: "photo",
+        ...marker,
+      });
+      return { error, marker };
+    },
+    anonInsertPayload: (g) => ({
+      patient_id: g.patientId,
+      created_by: g.userId,
+      storage_path: `${g.userId}/${randomUUID()}.jpg`,
+      kind: "photo",
+    }),
+    updatePatch: { caption: "changed" },
   },
   {
     table: "target_state",
@@ -714,6 +771,66 @@ describe("RLS: storage.objects (target-photos bucket)", () => {
   });
 });
 
+// Same cross-tenant storage discipline for the private `memory-capsules` bucket (family photo/video
+// reward media). Ownership is the leading path segment `<caregiver_id>/...`; the memory_capsules_*
+// storage.objects policies scope every verb to `(storage.foldername(name))[1] = auth.uid()`.
+describe("RLS: storage.objects (memory-capsules bucket)", () => {
+  const BUCKET = "memory-capsules";
+  const body = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+  const upload = (client: SupabaseClient, name: string) =>
+    client.storage.from(BUCKET).upload(name, body, { contentType: "image/png" });
+  const objectName = (g: Graph, tag: string) => `${g.userId}/${tag}-${randomUUID()}.png`;
+
+  it("positive control: owner can upload, list, download, and delete under their own folder", async () => {
+    const name = objectName(graphA, "own");
+    const up = await upload(clientA, name);
+    expect(up.error).toBeNull();
+    expect(up.data?.path).toBe(name);
+
+    const list = await clientA.storage.from(BUCKET).list(graphA.userId);
+    expect(list.error).toBeNull();
+    expect((list.data ?? []).map((o) => `${graphA.userId}/${o.name}`)).toContain(name);
+
+    const dl = await clientA.storage.from(BUCKET).download(name);
+    expect(dl.error).toBeNull();
+
+    const del = await clientA.storage.from(BUCKET).remove([name]);
+    expect(del.error).toBeNull();
+  });
+
+  it("cross-tenant INSERT: B cannot upload into A's folder, and nothing persists", async () => {
+    const name = `${graphA.userId}/attack-${randomUUID()}.png`;
+    const up = await upload(clientB, name);
+    expect(up.error).not.toBeNull();
+
+    const filename = name.slice(name.indexOf("/") + 1);
+    const check = await admin.storage.from(BUCKET).list(graphA.userId, { search: filename });
+    expect(check.data ?? []).toHaveLength(0);
+  });
+
+  it("cross-tenant SELECT: B cannot list or download A's objects", async () => {
+    const name = objectName(graphA, "victim");
+    expect((await upload(clientA, name)).error).toBeNull();
+
+    const list = await clientB.storage.from(BUCKET).list(graphA.userId);
+    expect(list.error).toBeNull();
+    expect(list.data ?? []).toHaveLength(0);
+
+    const dl = await clientB.storage.from(BUCKET).download(name);
+    expect(dl.error).not.toBeNull();
+
+    await admin.storage.from(BUCKET).remove([name]);
+  });
+
+  it("anon: unauthenticated client cannot upload", async () => {
+    const name = `${graphA.userId}/anon-${randomUUID()}.png`;
+    const up = await anonClient.storage
+      .from(BUCKET)
+      .upload(name, body, { contentType: "image/png" });
+    expect(up.error).not.toBeNull();
+  });
+});
+
 describe("ai_calls_today() global counter", () => {
   it("returns the same global count for any caller, spanning all tenants", async () => {
     // Each graph seeded one ai_usage row (in the last day); the SECURITY DEFINER function counts
@@ -796,6 +913,22 @@ describe("RLS: read-only clinician view (clinician_patients)", () => {
       expect(res.error).toBeNull();
       expect(res.data ?? []).toHaveLength(1);
     }
+  });
+
+  it("denial: a linked clinician CANNOT read the shared patient's family memory capsules", async () => {
+    // memory_capsules deliberately has NO clinician SELECT policy — family-private media is never
+    // part of the read-only clinician trend view, even for a patient the clinician IS linked to.
+    const byId = await clinicianClient
+      .from("memory_capsules")
+      .select("id")
+      .eq("id", graphA.capsuleId);
+    expect(byId.error).toBeNull();
+    expect(byId.data ?? []).toHaveLength(0);
+
+    const unfiltered = await clinicianClient.from("memory_capsules").select("id");
+    expect(unfiltered.error).toBeNull();
+    const ids = (unfiltered.data ?? []).map((r) => (r as { id: string }).id);
+    expect(ids).not.toContain(graphA.capsuleId);
   });
 
   it("denial: a clinician CANNOT read an UNLINKED patient's rows (graphB)", async () => {
