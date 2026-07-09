@@ -19,6 +19,7 @@ import { failAction, requireUser } from "@/lib/actions";
 import { srDefaultsForPatient } from "@/lib/sr/config";
 import type { Json, Tables, TablesInsert } from "@/lib/supabase/database.types";
 import { PRACTICABLE_STATUSES } from "@/lib/targets/queue";
+import { isOwnedPhotoPath, PHOTO_BUCKET } from "@/lib/wizard/photo-upload";
 import { aliasesFromJson } from "./grade-schema";
 import {
   annotateSessionInputSchema,
@@ -47,6 +48,36 @@ export interface StartSessionResult {
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
+
+/** Signed-URL lifetime for an uploaded target photo. One hour comfortably covers a single kiosk
+ * session (the URL is minted once at session start and reused across every phase); short enough that
+ * an Article-9-adjacent photo's link is never long-lived. Re-minted on each begin/resume. */
+const PHOTO_URL_TTL_SEC = 60 * 60;
+
+/**
+ * Resolve the image the kiosk renders for a target: a freshly signed URL for the caregiver's own
+ * uploaded photo when present, else the seeded/placeholder `image_url`. The signing goes through the
+ * RLS user client, so storage RLS confines it to objects under the caregiver's own folder — we also
+ * shape-check the key against the caller's uid first (defense in depth). ANY failure (bad shape,
+ * RLS/storage error, thrown client) degrades silently to the fallback so the session never breaks.
+ */
+async function resolveTargetImageUrl(
+  supabase: Awaited<ReturnType<typeof requireUser>>["supabase"],
+  caregiverId: string,
+  photoPath: string | null,
+  imageUrl: string | null,
+): Promise<string | null> {
+  if (!photoPath || !isOwnedPhotoPath(photoPath, caregiverId)) return imageUrl;
+  try {
+    const { data, error } = await supabase.storage
+      .from(PHOTO_BUCKET)
+      .createSignedUrl(photoPath, PHOTO_URL_TTL_SEC);
+    if (error || !data?.signedUrl) return imageUrl;
+    return data.signedUrl;
+  } catch {
+    return imageUrl;
+  }
+}
 
 /**
  * Input/snapshot failed zod validation — a silent drop here previously meant a session just
@@ -100,11 +131,11 @@ export async function startSessionAction(
   if (!parsed.success) return { data: null, error: zerr(parsed.error.issues) };
   const { targetId } = parsed.data;
 
-  const { supabase } = await requireUser();
+  const { user, supabase } = await requireUser();
 
   const { data: target, error: targetErr } = await supabase
     .from("targets")
-    .select("id, question, answer, image_url, status, patient_id, accepted_variants")
+    .select("id, question, answer, image_url, photo_path, status, patient_id, accepted_variants")
     .eq("id", targetId)
     .single();
   if (targetErr || !target) {
@@ -132,7 +163,8 @@ export async function startSessionAction(
     id: target.id,
     question: target.question,
     answer: target.answer,
-    imageUrl: target.image_url,
+    // Caregiver's uploaded photo (signed) when present, else the seeded/placeholder image.
+    imageUrl: await resolveTargetImageUrl(supabase, user.id, target.photo_path, target.image_url),
     acceptedVariants: aliasesFromJson(target.accepted_variants),
   };
 

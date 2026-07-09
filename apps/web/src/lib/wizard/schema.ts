@@ -45,6 +45,9 @@ export const createTargetInputSchema = z
     answer: z.string().trim().min(1).max(40),
     acceptedVariants: z.array(z.string().trim().min(1).max(80)).max(10).default([]),
     answerFormat: z.enum(["free_recall", "recognition"]).default("free_recall"),
+    // Storage object key of the caregiver's uploaded dual-coding photo (optional). Bounded here;
+    // ownership (folder === caller uid) + shape are re-checked server-side before it is persisted.
+    photoPath: z.string().max(200).optional(),
   })
   .strict();
 

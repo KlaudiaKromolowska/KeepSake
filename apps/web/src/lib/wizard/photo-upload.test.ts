@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  isOwnedPhotoPath,
+  isPhotoObjectPath,
   MAX_PHOTO_BYTES,
   type PhotoMime,
   photoObjectPath,
@@ -76,5 +78,41 @@ describe("photoObjectPath", () => {
       // The first segment is the RLS ownership key — it must be exactly the caregiver id.
       expect(path.split("/")[0]).toBe("cg-123");
     }
+  });
+});
+
+const UID = "11111111-1111-4111-8111-111111111111";
+const UUID = "22222222-2222-4222-8222-222222222222";
+const ownKey = (ext = "png") => `${UID}/${UUID}.${ext}`;
+
+describe("isPhotoObjectPath (shape gate before signing)", () => {
+  it("accepts a well-formed <folder>/<uuid>.<ext> key for each allowed extension", () => {
+    for (const ext of ["jpg", "png", "webp"]) expect(isPhotoObjectPath(ownKey(ext))).toBe(true);
+  });
+
+  it("rejects traversal, nested folders, missing/foreign extensions, and empty segments", () => {
+    expect(isPhotoObjectPath(`${UID}/${UUID}.svg`)).toBe(false); // disallowed (script vector) type
+    expect(isPhotoObjectPath(`${UID}/${UUID}`)).toBe(false); // no extension
+    expect(isPhotoObjectPath(`${UID}/sub/${UUID}.png`)).toBe(false); // nested folder
+    expect(isPhotoObjectPath(`${UID}/../secret.png`)).toBe(false); // traversal
+    expect(isPhotoObjectPath(`/${UUID}.png`)).toBe(false); // empty folder segment
+    expect(isPhotoObjectPath(`${UID}/`)).toBe(false); // empty file segment
+    expect(isPhotoObjectPath(UUID)).toBe(false); // no slash at all
+  });
+});
+
+describe("isOwnedPhotoPath (per-caregiver ownership gate)", () => {
+  it("accepts a key whose folder is exactly the caregiver's uid", () => {
+    expect(isOwnedPhotoPath(ownKey(), UID)).toBe(true);
+  });
+
+  it("rejects a well-formed key under ANOTHER caregiver's folder", () => {
+    // The security property: a caregiver can never attach or sign an object outside their own folder.
+    expect(isOwnedPhotoPath(`33333333-3333-4333-8333-333333333333/${UUID}.png`, UID)).toBe(false);
+  });
+
+  it("rejects a malformed filename even under the caller's own folder", () => {
+    expect(isOwnedPhotoPath(`${UID}/${UUID}.gif`, UID)).toBe(false);
+    expect(isOwnedPhotoPath(`${UID}/evil.png`, UID)).toBe(false);
   });
 });

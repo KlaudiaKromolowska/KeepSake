@@ -18,9 +18,13 @@ const ACCEPT = "image/jpeg,image/png,image/webp";
 export function PhotoQaSection({
   photoOptions,
   target,
+  onUploaded,
 }: {
   photoOptions: string[];
   target?: { question: string; answer: string };
+  /** Fired with the stored object key after a successful upload, so the target can dual-code with
+   * the caregiver's own photo. Seeded example checks never fire it (those are not the patient's). */
+  onUploaded?: (path: string) => void;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
@@ -63,7 +67,10 @@ export function PhotoQaSection({
       }
       const res = await uploadTargetPhotoAction(fd);
       if (res.error !== null) setError(res.error);
-      else setResult(res.data.qa);
+      else {
+        setResult(res.data.qa);
+        onUploaded?.(res.data.path);
+      }
     } catch {
       setError(C.errors.uploadFailed);
     } finally {

@@ -41,8 +41,31 @@ interface CallState {
   payload?: unknown;
   upsertOpts?: unknown;
 }
-function makeSupabase(route: (s: CallState) => { data: unknown; error: unknown }) {
+interface SignCall {
+  bucket: string;
+  path: string;
+  ttl: number;
+}
+function makeSupabase(
+  route: (s: CallState) => { data: unknown; error: unknown },
+  // Storage signer: defaults to a deterministic success. Tests override to force a signing failure.
+  sign: (path: string) => { data: { signedUrl: string } | null; error: unknown } = (path) => ({
+    data: { signedUrl: `https://signed.example/${path}?token=abc` },
+    error: null,
+  }),
+) {
   const calls: CallState[] = [];
+  const signCalls: SignCall[] = [];
+  const storage = {
+    from(bucket: string) {
+      return {
+        createSignedUrl(path: string, ttl: number) {
+          signCalls.push({ bucket, path, ttl });
+          return Promise.resolve(sign(path));
+        },
+      };
+    },
+  };
   function builder(table: string) {
     const state: CallState = { table, filters: {} };
     const exec = () => {
@@ -97,7 +120,7 @@ function makeSupabase(route: (s: CallState) => { data: unknown; error: unknown }
     };
     return b;
   }
-  return { client: { from: builder }, calls };
+  return { client: { from: builder, storage }, calls, signCalls };
 }
 
 function mockUser(client: unknown) {
@@ -181,6 +204,102 @@ describe("startSessionAction", () => {
     };
     expect(payload.summary.snapshot.phase).toBe("teach"); // first session
     expect(payload.summary.startProbe).toBe(false);
+  });
+
+  // --- Uploaded-photo dual-coding: the kiosk renders a freshly signed URL for the caregiver's own
+  // photo when present, and degrades to the seeded image on any problem. mockUser's uid is "user-1",
+  // so an owned object lives under the "user-1/" folder (storage RLS's ownership key).
+  const OWN_PHOTO_PATH = "user-1/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png";
+
+  it("target with an uploaded photo → signs a session-scoped URL for its own object and renders it", async () => {
+    const { client, signCalls } = makeSupabase((s) => {
+      if (s.table === "targets")
+        return { data: { ...activeTarget, photo_path: OWN_PHOTO_PATH }, error: null };
+      if (s.table === "patients")
+        return { data: { timezone: TZ, etiology: "alzheimers" }, error: null };
+      if (s.table === "sessions" && s.verb === "select") return { data: null, error: null };
+      if (s.table === "target_state") return { data: null, error: null };
+      if (s.table === "sessions" && s.verb === "insert")
+        return { data: { id: "sess-new" }, error: null };
+      return { data: null, error: null };
+    });
+    mockUser(client);
+
+    const result = await startSessionAction({ targetId: TARGET_ID });
+
+    expect(result.error).toBeNull();
+    // Exactly one signing call, scoped to the private bucket + the caregiver's own object key.
+    expect(signCalls).toHaveLength(1);
+    expect(signCalls[0]).toEqual({ bucket: "target-photos", path: OWN_PHOTO_PATH, ttl: 3600 });
+    // The rendered image is the signed URL, NOT the seeded image_url.
+    expect(result.data?.target.imageUrl).toBe(`https://signed.example/${OWN_PHOTO_PATH}?token=abc`);
+    expect(result.data?.target.imageUrl).not.toBe(activeTarget.image_url);
+  });
+
+  it("photo signing fails → degrades to the seeded image_url, never throws or blocks the session", async () => {
+    const { client, signCalls } = makeSupabase(
+      (s) => {
+        if (s.table === "targets")
+          return { data: { ...activeTarget, photo_path: OWN_PHOTO_PATH }, error: null };
+        if (s.table === "patients")
+          return { data: { timezone: TZ, etiology: "alzheimers" }, error: null };
+        if (s.table === "sessions" && s.verb === "select") return { data: null, error: null };
+        if (s.table === "target_state") return { data: null, error: null };
+        if (s.table === "sessions" && s.verb === "insert")
+          return { data: { id: "sess-new" }, error: null };
+        return { data: null, error: null };
+      },
+      () => ({ data: null, error: { message: "signing boom" } }),
+    );
+    mockUser(client);
+
+    const result = await startSessionAction({ targetId: TARGET_ID });
+
+    expect(result.error).toBeNull(); // session still starts
+    expect(signCalls).toHaveLength(1); // it tried
+    expect(result.data?.target.imageUrl).toBe(activeTarget.image_url); // fell back
+  });
+
+  it("no uploaded photo → does not sign anything, renders the seeded image_url", async () => {
+    const { client, signCalls } = makeSupabase((s) => {
+      if (s.table === "targets") return { data: activeTarget, error: null }; // no photo_path
+      if (s.table === "patients")
+        return { data: { timezone: TZ, etiology: "alzheimers" }, error: null };
+      if (s.table === "sessions" && s.verb === "select") return { data: null, error: null };
+      if (s.table === "target_state") return { data: null, error: null };
+      if (s.table === "sessions" && s.verb === "insert")
+        return { data: { id: "sess-new" }, error: null };
+      return { data: null, error: null };
+    });
+    mockUser(client);
+
+    const result = await startSessionAction({ targetId: TARGET_ID });
+
+    expect(signCalls).toHaveLength(0);
+    expect(result.data?.target.imageUrl).toBe(activeTarget.image_url);
+  });
+
+  it("RLS scoping: a photo_path under ANOTHER caregiver's folder is never signed (fallback, no leak)", async () => {
+    // Even if a foreign object key somehow lands on a readable target row, the ownership gate keeps
+    // us from ever asking storage to sign an object outside the caller's own folder.
+    const foreign = "99999999-9999-4999-8999-999999999999/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png";
+    const { client, signCalls } = makeSupabase((s) => {
+      if (s.table === "targets")
+        return { data: { ...activeTarget, photo_path: foreign }, error: null };
+      if (s.table === "patients")
+        return { data: { timezone: TZ, etiology: "alzheimers" }, error: null };
+      if (s.table === "sessions" && s.verb === "select") return { data: null, error: null };
+      if (s.table === "target_state") return { data: null, error: null };
+      if (s.table === "sessions" && s.verb === "insert")
+        return { data: { id: "sess-new" }, error: null };
+      return { data: null, error: null };
+    });
+    mockUser(client);
+
+    const result = await startSessionAction({ targetId: TARGET_ID });
+
+    expect(signCalls).toHaveLength(0); // never signed a foreign object
+    expect(result.data?.target.imageUrl).toBe(activeTarget.image_url);
   });
 
   it("opens a fresh target at the etiology's population-prior warm-start base (not cold-start), bit-identical", async () => {

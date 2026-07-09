@@ -283,6 +283,7 @@ export type Database = {
           id: string;
           image_url: string | null;
           patient_id: string;
+          photo_path: string | null;
           question: string;
           status: string;
           updated_at: string;
@@ -296,6 +297,7 @@ export type Database = {
           id?: string;
           image_url?: string | null;
           patient_id: string;
+          photo_path?: string | null;
           question: string;
           status?: string;
           updated_at?: string;
@@ -309,6 +311,7 @@ export type Database = {
           id?: string;
           image_url?: string | null;
           patient_id?: string;
+          photo_path?: string | null;
           question?: string;
           status?: string;
           updated_at?: string;

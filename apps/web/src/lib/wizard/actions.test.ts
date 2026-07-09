@@ -52,7 +52,7 @@ const badProposal: WizardProposal = {
 };
 
 function fakeSupabase() {
-  const insert = vi.fn(() => ({
+  const insert = vi.fn((_payload: Record<string, unknown>) => ({
     select: vi.fn(() => ({ single: vi.fn(async () => ({ data: { id: "t1" }, error: null })) })),
   }));
   const patientSingle = vi.fn(async () => ({ data: { id: "p1" }, error: null }));
@@ -152,5 +152,46 @@ describe("createTargetAction", () => {
     });
     expect(res.error).toBeNull();
     expect(res.data).toEqual({ id: "t1" });
+  });
+
+  const baseInput = {
+    question: "What is your daughter's name?",
+    answer: "Sarah",
+    acceptedVariants: ["Sara"],
+    answerFormat: "free_recall" as const,
+  };
+  const OWN_PHOTO = "u1/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png"; // requireUserMock uid is "u1"
+
+  it("attaches an uploaded photo the caregiver owns (folder === their uid) to the target", async () => {
+    const sb = fakeSupabase();
+    requireUserMock.mockResolvedValue({ user: { id: "u1" }, supabase: sb });
+
+    const res = await createTargetAction({ ...baseInput, photoPath: OWN_PHOTO });
+
+    expect(res.error).toBeNull();
+    expect(sb.insert).toHaveBeenCalledTimes(1);
+    expect(sb.insert.mock.calls[0][0]).toMatchObject({ photo_path: OWN_PHOTO });
+  });
+
+  it("drops a photo_path under ANOTHER caregiver's folder — never attaches a foreign object", async () => {
+    const sb = fakeSupabase();
+    requireUserMock.mockResolvedValue({ user: { id: "u1" }, supabase: sb });
+
+    const res = await createTargetAction({
+      ...baseInput,
+      photoPath: "someone-else/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png",
+    });
+
+    expect(res.error).toBeNull(); // creation is never blocked by a bad photo path
+    expect(sb.insert.mock.calls[0][0]).toMatchObject({ photo_path: null });
+  });
+
+  it("stores null photo_path when no photo was uploaded", async () => {
+    const sb = fakeSupabase();
+    requireUserMock.mockResolvedValue({ user: { id: "u1" }, supabase: sb });
+
+    await createTargetAction(baseInput);
+
+    expect(sb.insert.mock.calls[0][0]).toMatchObject({ photo_path: null });
   });
 });

@@ -6,6 +6,7 @@ import { failAction, requireUser } from "@/lib/actions";
 import { AiUnavailableError, assertAiQuota, generateStructured, QuotaError } from "@/lib/ai/core";
 import type { Json } from "@/lib/supabase/database.types";
 import { WIZARD_COPY } from "./copy";
+import { isOwnedPhotoPath } from "./photo-upload";
 import { normalizeVariants, validateTarget } from "./rules";
 import {
   createTargetInputSchema,
@@ -96,7 +97,7 @@ export async function createTargetAction(input: unknown): Promise<ActionResult<{
   const parsed = createTargetInputSchema.safeParse(input);
   if (!parsed.success) return { data: null, error: zerr(parsed.error.issues) };
 
-  const { supabase } = await requireUser();
+  const { user, supabase } = await requireUser();
 
   const { data: patient, error: patientErr } = await supabase
     .from("patients")
@@ -107,6 +108,13 @@ export async function createTargetAction(input: unknown): Promise<ActionResult<{
   if (patientErr) return failAction("createTarget: patient", patientErr, WIZARD_COPY.errors.save);
   if (!patient) return { data: null, error: WIZARD_COPY.errors.noPatient };
 
+  // A caregiver may only attach their OWN uploaded object: keep the path only if its folder is the
+  // caller's uid and the shape is valid, else drop it silently (never block target creation on it).
+  const photoPath =
+    parsed.data.photoPath && isOwnedPhotoPath(parsed.data.photoPath, user.id)
+      ? parsed.data.photoPath
+      : null;
+
   const demo = process.env.DEMO_MODE === "1";
   const { data, error } = await supabase
     .from("targets")
@@ -116,6 +124,7 @@ export async function createTargetAction(input: unknown): Promise<ActionResult<{
       answer: parsed.data.answer,
       accepted_variants: parsed.data.acceptedVariants as unknown as Json,
       answer_format: parsed.data.answerFormat,
+      photo_path: photoPath,
       // Demo skips the (post-MVP) candidacy-screening UI so the new target is practisable at once.
       candidacy: demo ? "passed" : "unscreened",
       status: demo ? "active" : "draft",
