@@ -79,6 +79,7 @@ export async function GET(): Promise<Response> {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="keepsake-export-${date}.csv"`,
+      "X-Content-Type-Options": "nosniff",
       "Cache-Control": "no-store",
     },
   });

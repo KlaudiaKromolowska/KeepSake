@@ -4,14 +4,16 @@
  * few plain lines — no library earns its place here.
  *
  * CSV injection: spreadsheet apps (Excel, Sheets, LibreOffice) treat a cell whose first character
- * is `=`, `+`, `-`, or `@` as a formula. Exported rows can carry caregiver-authored free text
+ * is `=`, `+`, `-`, or `@` as a formula. A leading Tab (0x09) or Carriage Return (0x0D) is also
+ * OWASP-listed — some importers strip the leading control character first, then evaluate the
+ * (now cell-initial) rest as a formula. Exported rows can carry caregiver-authored free text
  * (target questions), so every stringified cell is checked and, if it starts with one of those
  * characters, guarded with a leading apostrophe — spreadsheet apps render the cell as literal text
  * and drop the apostrophe from display; the file itself still carries the guarded value, not a
  * silently-dropped one.
  */
 
-const FORMULA_PREFIXES = ["=", "+", "-", "@"];
+const FORMULA_PREFIXES = ["=", "+", "-", "@", "\t", "\r"];
 
 export type CsvCell = string | number | boolean | null;
 

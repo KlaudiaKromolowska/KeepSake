@@ -47,6 +47,16 @@ describe("toCsvRow — formula/CSV-injection guarding", () => {
     expect(toCsvRow(["cost=5"])).toBe("cost=5\r\n");
   });
 
+  it("prefixes a cell starting with a tab with a guarding apostrophe", () => {
+    const cell = "\tcmd|'/bin/calc'!A1";
+    expect(toCsvRow([cell])).toBe(`'${cell}\r\n`);
+  });
+
+  it("guards and quotes a cell starting with a carriage return (also RFC-4180 quote-triggering)", () => {
+    const cell = "\rcmd|'/bin/calc'!A1";
+    expect(toCsvRow([cell])).toBe(`"'${cell}"\r\n`);
+  });
+
   it("guards and quotes together when the guarded cell also needs quoting", () => {
     expect(toCsvRow(["=1,2"])).toBe('"\'=1,2"\r\n');
   });
