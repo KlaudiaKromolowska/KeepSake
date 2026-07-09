@@ -6,7 +6,13 @@
 // offline-fallback page. Every other request — every server action (POST), every dynamic SSR
 // page (dashboard, kiosk session, etc.), every /api/* call — is left untouched and always goes
 // to the network, so nothing authenticated or health-related is ever written into this cache.
-const CACHE_NAME = "keepsake-shell-v1";
+// Bump SW_VERSION on every deploy that changes any precached content — especially `/offline`,
+// which is otherwise served stale forever (cache-first, see isStaticAsset below). `activate`
+// deletes every cache whose name isn't the current CACHE_NAME (see below), so a version bump is
+// the ONLY step ever needed to force clients onto the new shell. `/_next/static/*` is separately
+// build-hashed per file and is unaffected either way.
+const SW_VERSION = "v1";
+const CACHE_NAME = `keepsake-shell-${SW_VERSION}`;
 const PRECACHE_URLS = [
   "/offline",
   "/manifest.webmanifest",
