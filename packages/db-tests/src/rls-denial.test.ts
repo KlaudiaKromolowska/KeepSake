@@ -182,6 +182,13 @@ async function seedGraph(email: string, password: string): Promise<Graph> {
     .insert({ patient_id: patient.id, patient_consent: true, caregiver_role_ack: true });
   if (consentErr) throw new Error(`seed consent failed: ${consentErr.message}`);
 
+  // A private caregiver note (Article-9). Moved off patients into its own table so the read-only
+  // clinician role cannot read it — the clinician-denial test below asserts exactly that.
+  const { error: noteErr } = await admin
+    .from("patient_notes")
+    .insert({ patient_id: patient.id, note: "private caregiver note" });
+  if (noteErr) throw new Error(`seed patient_notes failed: ${noteErr.message}`);
+
   const { data: auditLog, error: auditErr } = await admin
     .from("audit_log")
     .insert({ caregiver_id: userId, action: "consent_granted", detail: {} })
@@ -507,6 +514,51 @@ const tableSpecs: TableSpec[] = [
     },
     anonInsertPayload: (g) => ({ patient_id: g.patientId }),
     updatePatch: { granted_at: new Date().toISOString() },
+  },
+  {
+    // patient_notes: the free-text caregiver note, moved off patients (GDPR minimization) so the
+    // read-only clinician role can't read it. 1:1 with a patient (PK = patient_id), owned through
+    // patients — same shape as consent. The clinician-cannot-read assertion lives in the clinician
+    // block; this generic spec covers owner CRUD + caregiver-vs-caregiver cross-tenant denial.
+    table: "patient_notes",
+    pk: "patient_id",
+    ownRowId: (g) => g.patientId,
+    readableByOwner: true,
+    ownerCanMutate: true,
+    insertOwn: async (client, g) => {
+      // The seeded patient already has a note row (PK = patient_id), so create a fresh patient first
+      // — exercising the client's real patients -> patient_notes permission chain.
+      const { data: patient, error: patientErr } = await client
+        .from("patients")
+        .insert({ caregiver_id: g.userId, display_name: "extra for note", timezone: "UTC" })
+        .select("id")
+        .single();
+      if (patientErr || !patient) return { data: null, error: patientErr };
+      return client
+        .from("patient_notes")
+        .insert({ patient_id: patient.id, note: "own note" })
+        .select("patient_id")
+        .single();
+    },
+    insertCross: async (client, _attacker, victim) => {
+      // Give the victim a note-less patient via service role, so the attacker's insert is blocked by
+      // RLS alone — not incidentally by a PK collision with the seeded note row.
+      const { data: extraPatient, error: scaffoldErr } = await admin
+        .from("patients")
+        .insert({
+          caregiver_id: victim.userId,
+          display_name: "victim note patient",
+          timezone: "UTC",
+        })
+        .select("id")
+        .single();
+      if (scaffoldErr || !extraPatient) throw new Error(`scaffold failed: ${scaffoldErr?.message}`);
+      const marker = { patient_id: extraPatient.id };
+      const { error } = await client.from("patient_notes").insert({ ...marker, note: "attack" });
+      return { error, marker };
+    },
+    anonInsertPayload: (g) => ({ patient_id: g.patientId, note: "anon" }),
+    updatePatch: { note: "changed" },
   },
   {
     table: "audit_log",
@@ -931,6 +983,23 @@ describe("RLS: read-only clinician view (clinician_patients)", () => {
     expect(ids).not.toContain(graphA.capsuleId);
   });
 
+  it("denial: a linked clinician CANNOT read the shared patient's private caregiver note", async () => {
+    // The core fix. patient_notes has NO clinician SELECT policy — the free-text Article-9 note is
+    // never part of the read-only clinician trend view, even for a patient the clinician IS linked
+    // to. Asserted both by id and via an unfiltered scan (RLS is the boundary, not the query).
+    const byId = await clinicianClient
+      .from("patient_notes")
+      .select("note")
+      .eq("patient_id", graphA.patientId);
+    expect(byId.error).toBeNull();
+    expect(byId.data ?? []).toHaveLength(0);
+
+    const unfiltered = await clinicianClient.from("patient_notes").select("patient_id");
+    expect(unfiltered.error).toBeNull();
+    const ids = (unfiltered.data ?? []).map((r) => (r as { patient_id: string }).patient_id);
+    expect(ids).not.toContain(graphA.patientId);
+  });
+
   it("denial: a clinician CANNOT read an UNLINKED patient's rows (graphB)", async () => {
     for (const [table, col, id] of sharedTables) {
       const res = await clinicianClient.from(table).select(col).eq(col, id(graphB));
@@ -1146,6 +1215,11 @@ describe("RLS: care-home multi-tenant (organizations)", () => {
       .insert({ patient_id: patient.id, patient_consent: true, caregiver_role_ack: true });
     if (consentErr) throw new Error(`org consent ${tag} failed: ${consentErr.message}`);
 
+    const { error: noteErr } = await admin
+      .from("patient_notes")
+      .insert({ patient_id: patient.id, note: `org ${tag} note` });
+    if (noteErr) throw new Error(`org patient_notes ${tag} failed: ${noteErr.message}`);
+
     return {
       admin: orgAdmin,
       staff,
@@ -1166,6 +1240,9 @@ describe("RLS: care-home multi-tenant (organizations)", () => {
     ["trials", "id", (o: OrgFixture) => o.trialId],
     ["target_state", "target_id", (o: OrgFixture) => o.targetId],
     ["consent", "patient_id", (o: OrgFixture) => o.patientId],
+    // patient_notes is shared with the org care team (like consent), NOT the read-only clinician —
+    // so it belongs in the org positive-read + both isolation directions below.
+    ["patient_notes", "patient_id", (o: OrgFixture) => o.patientId],
   ] as const;
 
   beforeAll(async () => {
@@ -1238,6 +1315,14 @@ describe("RLS: care-home multi-tenant (organizations)", () => {
       .select("id");
     expect(trial.error).toBeNull();
     expect(trial.data ?? []).toHaveLength(1);
+
+    // Staff can also maintain the caregiver note (care-team, not clinician) — full CRUD like consent.
+    const noteUpd = await orgA.staff.client
+      .from("patient_notes")
+      .update({ note: "staff-updated note" })
+      .eq("patient_id", orgA.patientId)
+      .select("patient_id");
+    expect(noteUpd.data ?? []).toHaveLength(1);
 
     const del = await orgA.staff.client.from("targets").delete().eq("id", newTargetId).select("id");
     expect(del.data ?? []).toHaveLength(1); // cascades the trial+session cleanup via service role below

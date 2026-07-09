@@ -66,7 +66,7 @@ type Admin = ReturnType<typeof supabaseAdmin>;
 async function demoPatient(admin: Admin) {
   const { data, error } = await admin
     .from("patients")
-    .select("id, display_name, notes, etiology, timezone")
+    .select("id, display_name, etiology, timezone")
     .eq("is_demo", true)
     .order("created_at", { ascending: true })
     .limit(1)
@@ -101,9 +101,14 @@ const distractorsSchema = z.object({ prompts: z.array(z.string()) });
 async function recordDistractors(admin: Admin, patientId: string): Promise<void> {
   const { data: patient } = await admin
     .from("patients")
-    .select("display_name, notes")
+    .select("display_name")
     .eq("id", patientId)
     .single();
+  const { data: noteRow } = await admin
+    .from("patient_notes")
+    .select("note")
+    .eq("patient_id", patientId)
+    .maybeSingle();
   const { data: target } = await admin
     .from("targets")
     .select("answer")
@@ -122,7 +127,7 @@ async function recordDistractors(admin: Admin, patientId: string): Promise<void>
     system: DISTRACTORS_SYSTEM,
     user: buildDistractorsPrompt({
       displayName: patient.display_name,
-      notes: patient.notes,
+      notes: noteRow?.note ?? null,
       locale: "en",
     }),
     model: "claude-haiku-4-5",

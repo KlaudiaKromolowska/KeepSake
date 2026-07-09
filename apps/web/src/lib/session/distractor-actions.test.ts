@@ -27,8 +27,10 @@ const SAFE_PROMPTS = [
 interface FakeOpts {
   target?: { answer: string; patient_id: string } | null;
   targetErr?: unknown;
-  patient?: { display_name: string; notes: string | null } | null;
+  patient?: { display_name: string } | null;
   patientErr?: unknown;
+  /** patient_notes row for this patient (Article-9 note now lives in its own table). */
+  note?: string | null;
 }
 
 function fakeSupabase(opts: FakeOpts) {
@@ -44,8 +46,20 @@ function fakeSupabase(opts: FakeOpts) {
     eq: () => patientChain,
     single: async () => ({ data: opts.patient ?? null, error: opts.patientErr ?? null }),
   };
+  const noteChain = {
+    select: () => noteChain,
+    eq: () => noteChain,
+    maybeSingle: async () => ({
+      data: opts.note != null ? { note: opts.note } : null,
+      error: null,
+    }),
+  };
   // biome-ignore lint/suspicious/noExplicitAny: minimal test double, not a real SupabaseClient.
-  const from = vi.fn((table: string): any => (table === "targets" ? targetChain : patientChain));
+  const from = vi.fn((table: string): any => {
+    if (table === "targets") return targetChain;
+    if (table === "patient_notes") return noteChain;
+    return patientChain;
+  });
   return { from };
 }
 
@@ -61,7 +75,8 @@ describe("personalizedDistractorsAction", () => {
   it("returns the personalized prompts on the happy path", async () => {
     mockRequireUser({
       target: { answer: "Sarah", patient_id: "p1" },
-      patient: { display_name: "Mum", notes: "loves gardening" },
+      patient: { display_name: "Mum" },
+      note: "loves gardening",
     });
     assertAiQuotaMock.mockResolvedValue(undefined);
     generateStructuredMock.mockResolvedValue({ prompts: SAFE_PROMPTS });
@@ -79,7 +94,7 @@ describe("personalizedDistractorsAction", () => {
   it("silently falls back to null when the code-side re-check rejects the batch", async () => {
     mockRequireUser({
       target: { answer: "Sarah", patient_id: "p1" },
-      patient: { display_name: "Mum", notes: null },
+      patient: { display_name: "Mum" },
     });
     assertAiQuotaMock.mockResolvedValue(undefined);
     generateStructuredMock.mockResolvedValue({
@@ -92,7 +107,7 @@ describe("personalizedDistractorsAction", () => {
   it("silently falls back to null when quota is exceeded", async () => {
     mockRequireUser({
       target: { answer: "Sarah", patient_id: "p1" },
-      patient: { display_name: "Mum", notes: null },
+      patient: { display_name: "Mum" },
     });
     assertAiQuotaMock.mockRejectedValue(new Error("quota exceeded"));
 
@@ -103,7 +118,7 @@ describe("personalizedDistractorsAction", () => {
   it("silently falls back to null when the AI call fails", async () => {
     mockRequireUser({
       target: { answer: "Sarah", patient_id: "p1" },
-      patient: { display_name: "Mum", notes: null },
+      patient: { display_name: "Mum" },
     });
     assertAiQuotaMock.mockResolvedValue(undefined);
     generateStructuredMock.mockRejectedValue(new Error("AI unavailable"));
