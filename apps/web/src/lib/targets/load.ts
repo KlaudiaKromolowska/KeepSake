@@ -1,13 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveActivePatient } from "@/lib/patients/active";
 import type { Database } from "@/lib/supabase/database.types";
 import { PRACTICABLE_STATUSES, type QueueTarget } from "./queue";
 
 /**
- * Server-side loader for the multi-target queue: the caregiver's patient plus every practicable
- * target with its persisted schedule state, mapped to the pure `QueueTarget` shape. One query for
- * all four consumers (dashboard, session entry, /schedule, /targets) so the roster never drifts
- * between surfaces. RLS scopes every read to the caller's own patient. Returns `null` when there is
- * no patient yet; `targets: []` when the patient has no practicable target.
+ * Server-side loader for the multi-target queue: the caregiver's ACTIVE patient plus every
+ * practicable target with its persisted schedule state, mapped to the pure `QueueTarget` shape. One
+ * query for all four consumers (dashboard, session entry, /schedule, /targets) so the roster never
+ * drifts between surfaces. The active patient is the cookie-selected owned patient (multi-patient
+ * switcher) or the oldest owned one. RLS scopes every read to the caller. Returns `null` when there
+ * is no patient yet; `targets: []` when the active patient has no practicable target.
  */
 
 export interface QueuePatient {
@@ -34,14 +36,17 @@ interface TargetRowWithState {
   } | null;
 }
 
-export async function loadQueue(supabase: SupabaseClient<Database>): Promise<LoadedQueue | null> {
-  const { data: patient, error: patientErr } = await supabase
-    .from("patients")
-    .select("id, timezone, etiology")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (patientErr || !patient) return null;
+export async function loadQueue(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<LoadedQueue | null> {
+  const active = await resolveActivePatient(supabase, userId);
+  if (!active) return null;
+  const patient: QueuePatient = {
+    id: active.id,
+    timezone: active.timezone,
+    etiology: active.etiology,
+  };
 
   const { data, error: targetsErr } = await supabase
     .from("targets")

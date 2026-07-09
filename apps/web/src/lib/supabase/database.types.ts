@@ -73,6 +73,32 @@ export type Database = {
         };
         Relationships: [];
       };
+      clinician_patients: {
+        Row: {
+          clinician_id: string;
+          created_at: string;
+          patient_id: string;
+        };
+        Insert: {
+          clinician_id: string;
+          created_at?: string;
+          patient_id: string;
+        };
+        Update: {
+          clinician_id?: string;
+          created_at?: string;
+          patient_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "clinician_patients_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       consent: {
         Row: {
           caregiver_role_ack: boolean;
@@ -360,6 +386,19 @@ export type Database = {
     };
     Functions: {
       ai_calls_today: { Args: never; Returns: number };
+      is_clinician_for: { Args: { p_patient_id: string }; Returns: boolean };
+      link_clinician: {
+        Args: { p_clinician_email: string; p_patient_id: string };
+        Returns: string;
+      };
+      list_clinicians_for_patient: {
+        Args: { p_patient_id: string };
+        Returns: {
+          clinician_id: string;
+          created_at: string;
+          email: string;
+        }[];
+      };
     };
     Enums: {
       etiology: "alzheimers" | "vascular" | "lewy" | "parkinsons" | "mixed" | "unspecified";

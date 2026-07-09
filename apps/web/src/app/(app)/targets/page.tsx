@@ -23,9 +23,9 @@ const PHASE_ORDER: Record<TargetPhase, number> = {
 };
 
 export default async function TargetsPage() {
-  const { supabase } = await requireUser();
+  const { user, supabase } = await requireUser();
 
-  const queue = await loadQueue(supabase);
+  const queue = await loadQueue(supabase, user.id);
   if (!queue) return <Shell body={C.empty} />;
   if (queue.targets.length === 0) return <Shell body={C.empty} />;
 

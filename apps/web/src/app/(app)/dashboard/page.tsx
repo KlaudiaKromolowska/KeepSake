@@ -1,9 +1,13 @@
 import Link from "next/link";
+import { PatientSwitcher } from "@/components/patients/patient-switcher";
 import { SiteFooter } from "@/components/site-footer";
 import { requireUser } from "@/lib/actions";
 import { signOut } from "@/lib/auth/actions";
+import { CLINICIAN_COPY } from "@/lib/clinicians/copy";
+import { listClinicianPatients } from "@/lib/clinicians/load";
 import { COACH_COPY } from "@/lib/coach/copy";
 import { ETIOLOGY_COPY } from "@/lib/etiology/copy";
+import { listOwnedPatients } from "@/lib/patients/active";
 import { PROGRESS_COPY } from "@/lib/progress/copy";
 import { REVIEW_COPY } from "@/lib/review/copy";
 import { SCHEDULE_PLAN_COPY } from "@/lib/schedule/copy";
@@ -20,9 +24,16 @@ export const metadata = { title: "Dashboard — Keepsake" };
 export default async function DashboardPage() {
   const { user, supabase } = await requireUser();
 
+  // Multi-patient: the owned roster (switcher) and any patients shared WITH this user (clinician).
+  const [ownedPatients, sharedWithMe] = await Promise.all([
+    listOwnedPatients(supabase, user.id),
+    listClinicianPatients(supabase, user.id),
+  ]);
+
   // V2 multi-target: aggregate over every practicable target, then pick the one to open on (due
   // wins; acquisition wins ties). Best-effort — a read failure just yields no CTA, never a break.
-  const queue = await loadQueue(supabase);
+  const queue = await loadQueue(supabase, user.id);
+  const activePatientId = queue?.patient.id ?? ownedPatients[0]?.id ?? null;
   const now = Date.now();
   const classified = queue ? classifyTargets(queue.targets, now, queue.patient.timezone) : [];
   const selectedId = queue ? selectSessionTarget(queue.targets, now, queue.patient.timezone) : null;
@@ -37,6 +48,10 @@ export default async function DashboardPage() {
     <>
       <main className="flex flex-1 flex-col items-center justify-center gap-8 p-6">
         <h1 className="text-2xl font-semibold">Keepsake — signed in as {user.email}</h1>
+
+        {ownedPatients.length > 0 && activePatientId && (
+          <PatientSwitcher patients={ownedPatients} activeId={activePatientId} />
+        )}
 
         {target ? (
           <Link
@@ -123,6 +138,25 @@ export default async function DashboardPage() {
           <span className="text-2xl font-semibold">{COACH_COPY.title}</span>
           <span className="text-lg text-zinc-600">{COACH_COPY.intro}</span>
         </Link>
+
+        {target && (
+          <Link
+            href="/clinicians"
+            className="flex min-h-[64px] w-full max-w-xl flex-col items-center gap-2 rounded-2xl border-2 border-zinc-900 bg-white px-8 py-6 text-center text-zinc-900 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+          >
+            <span className="text-2xl font-semibold">{CLINICIAN_COPY.manage.cardTitle}</span>
+            <span className="text-lg text-zinc-600">{CLINICIAN_COPY.manage.cardHint}</span>
+          </Link>
+        )}
+
+        {sharedWithMe.length > 0 && (
+          <Link
+            href="/clinician"
+            className="flex min-h-[48px] items-center text-lg text-zinc-600 underline underline-offset-4 focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+          >
+            {CLINICIAN_COPY.view.title}
+          </Link>
+        )}
 
         <form action={signOut}>
           <button
