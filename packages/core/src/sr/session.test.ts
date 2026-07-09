@@ -319,6 +319,75 @@ describe("session-start probe streak / mastery (rule 3)", () => {
   });
 });
 
+// Mastery is a one-time handoff event: `endReason: "mastered"` fires ONLY on the
+// !mastered → mastered transition. An already-mastered target's start-probe recall runs as a
+// normal (booster) session so its schedule routes through `onBoosterOutcome`, not `afterMastery`.
+describe("already-mastered start probe is transition-gated (booster sessions)", () => {
+  const mastered = () =>
+    fresh({
+      sessionCount: 6,
+      startStreak: config.masteryStreak,
+      lastStartSuccessDay: "1970-01-02",
+      mastered: true,
+      lastSuccessSec: 480,
+    });
+
+  it("a distinct-day recall does NOT re-fire mastered; enters the trial loop as a booster session", () => {
+    const started = startSession(mastered(), { at: 5 * DAY, timeZone: TZ }, config);
+    const s = sessionReduce(
+      frozen(started),
+      { type: "probe_result", outcome: "recall", at: 5 * DAY },
+      config,
+    );
+    expect(s.endReason).toBeNull();
+    expect(s.handoffToScheduler).toBe(false);
+    expect(s.phase).toBe("distractor");
+    expect(s.isStartProbe).toBe(false);
+    expect(s.progress.mastered).toBe(true); // stays mastered
+    expect(s.progress.startStreak).toBe(config.masteryStreak); // frozen at the cap, never climbs
+    expect(s.intervalSec).toBe(480); // opens at lastSuccessSec
+    expect(s.trials.at(-1)).toMatchObject({ intervalSec: 0, outcome: "recall", corrected: false });
+  });
+
+  it("the first-time !mastered → mastered transition still fires exactly once", () => {
+    // one shy of mastery; the crossing recall fires mastered
+    const started = startSession(
+      fresh({
+        sessionCount: 5,
+        startStreak: config.masteryStreak - 1,
+        lastStartSuccessDay: "1970-01-02",
+        lastSuccessSec: 480,
+      }),
+      { at: 5 * DAY, timeZone: TZ },
+      config,
+    );
+    const s = sessionReduce(
+      frozen(started),
+      { type: "probe_result", outcome: "recall", at: 5 * DAY },
+      config,
+    );
+    expect(s.endReason).toBe("mastered");
+    expect(s.handoffToScheduler).toBe(true);
+    expect(s.progress.mastered).toBe(true);
+    expect(s.progress.startStreak).toBe(config.masteryStreak);
+  });
+
+  it("a mastered target's start-probe miss resets the streak, stays mastered, routes to correction", () => {
+    const started = startSession(mastered(), { at: 5 * DAY, timeZone: TZ }, config);
+    const s = sessionReduce(
+      frozen(started),
+      { type: "probe_result", outcome: "miss", at: 5 * DAY },
+      config,
+    );
+    expect(s.phase).toBe("correcting");
+    expect(s.progress.startStreak).toBe(0);
+    expect(s.progress.mastered).toBe(true); // mastery is never lost on a booster miss
+    expect(s.endReason).toBeNull();
+    expect(s.isStartProbe).toBe(false);
+    expect(s.trials.at(-1)).toMatchObject({ intervalSec: 0, outcome: "miss", corrected: true });
+  });
+});
+
 describe("caregiver end (rule 8)", () => {
   it("end after a success closes directly on ended", () => {
     let s = openSession1(0);

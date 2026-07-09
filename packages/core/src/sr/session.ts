@@ -269,11 +269,16 @@ function handleStartProbe(
     };
   }
 
-  // recall — advance the streak only across distinct calendar days.
+  // recall — advance the streak only across distinct calendar days. Capped at masteryStreak so an
+  // already-mastered target's streak never climbs past the threshold (keeps the persisted value
+  // stable through the booster loop).
   const day = calendarDayInTz(at, state.timeZone);
   const priorDay = state.progress.lastStartSuccessDay;
   const distinctDay = priorDay === null || priorDay !== day;
-  const startStreak = distinctDay ? state.progress.startStreak + 1 : state.progress.startStreak;
+  const startStreak = Math.min(
+    distinctDay ? state.progress.startStreak + 1 : state.progress.startStreak,
+    config.masteryStreak,
+  );
   const progress: TargetProgress = {
     ...state.progress,
     startStreak,
@@ -281,7 +286,10 @@ function handleStartProbe(
   };
   const trials = [...state.trials, trial(0, "recall", false, at)];
 
-  if (startStreak >= config.masteryStreak) {
+  // Transition-gated: mastery is a one-time handoff, fired ONLY on the !mastered → mastered
+  // crossing. An already-mastered target flows into the trial loop below (a booster session), so
+  // its schedule routes through `onBoosterOutcome`, not another `afterMastery` reset.
+  if (!state.progress.mastered && startStreak >= config.masteryStreak) {
     return {
       ...state,
       phase: "ended",

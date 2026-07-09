@@ -138,23 +138,20 @@ anywhere, including a slide).
   vs. retrieval vs. attention).
 - **The pre-schedule daily cadence is a simulation choice**, not an engine rule — see "How it
   works" above.
-- **An engine coupling this simulation surfaced, not introduced:** `session.ts`'s
-  `handleStartProbe` never caps `progress.startStreak`, so *every* distinct-day session-start
-  recall after first mastery re-satisfies `startStreak >= masteryStreak` and re-fires
-  `endReason: "mastered"`. Per the scheduler's own documented contract, a `"mastered"` endReason
-  always discards the in-flight booster-mode result and calls `afterMastery` instead — which resets
-  the booster cadence back to its shortest (7-day) step, rather than letting `onBoosterOutcome`
-  grow it toward 14/30/90 days. This is real behavior of the shipped reducers (observed by driving
-  them, not asserted), not something this simulation added or changed. Whether it's intended
-  ("reconfirm mastery = stay conservative") or an oversight is a real open question worth a
-  deliberate product decision — out of scope for this task (simulation-only, no engine changes).
-- **A related discrepancy, also observed, not fixed:** `apps/web/src/lib/session/actions.ts`'s
-  `endSessionAction` calls `onSessionStartOutcome` for *every* existing schedule regardless of
-  `mode`, rather than dispatching on `existing.mode` the way `scheduler.ts`'s own docstring
-  describes (`onSessionStartOutcome` pre-mastery, `onBoosterOutcome` post-mastery). This simulation
-  follows the engine's documented contract (dispatch by mode) rather than replicating that app-level
-  code path, since the task scope is `packages/core` only. Worth a look, not addressed here.
+- **An engine coupling this simulation surfaced — since resolved (PR #27):** `session.ts`'s
+  `handleStartProbe` used to re-fire `endReason: "mastered"` on *every* distinct-day session-start
+  recall after first mastery (it never guarded on `progress.mastered`), which discarded the
+  in-flight booster result and called `afterMastery` — collapsing the booster cadence back to its
+  shortest step instead of letting `onBoosterOutcome` grow it toward 14/30/90 days. The related
+  app-side half was `endSessionAction` calling `onSessionStartOutcome` for *every* existing schedule
+  regardless of `mode`. Both are now fixed: mastery is **transition-gated** (fires once, on
+  `!mastered → mastered`, with `startStreak` capped at `masteryStreak`) and `endSessionAction`
+  dispatches by `existing.mode` (`onBoosterOutcome` post-mastery, `onSessionStartOutcome`
+  pre-mastery). This simulation already followed the correct mode-dispatched contract and guarded on
+  `endReason !== "mastered"`, so the engine fix only makes it more faithful — no `simulate.ts`
+  changes were needed.
 - **Calibration was done by eye**, iterating until candidacy pass rate, mastery rate, and booster
   survival all looked plausible — not fit to any target distribution. A different, equally
   defensible set of constants would produce different headline numbers without changing any engine
-  code.
+  code. Note: the booster-survival figures were eyeballed against the pre-PR-#27 behavior; the
+  headline time-to-mastery number is unaffected (mastery timing is unchanged by the booster fix).
