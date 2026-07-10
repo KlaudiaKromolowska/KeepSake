@@ -211,6 +211,40 @@ posture, with the model choice justified per call.*
 
 ---
 
+## How we used Claude to build — and judge — Keepsake
+
+Claude isn't only *inside* Keepsake (the coach, the agentic report, the grader). It **built,
+reviewed, audited, and judged** the product — and this very submission.
+
+- **Subagent-driven build.** Keepsake was assembled Claude-Code-**subagent-driven**: parallel Claude
+  agents implemented independent features against the plan, so the whole `packages/core` spine and the
+  nine AI surfaces came together as concurrent workstreams rather than one serial thread.
+- **Adversarial review-and-fix loop on every PR.** Each pull request went through a **Claude
+  code-review agent tasked to be adversarial** — hunt bugs, RLS gaps, injection holes — followed by a
+  fix pass before merge. Review was a gate, not a courtesy.
+- **A fidelity-audit agent that caught real drift.** A dedicated Claude agent checked the *actual
+  implementation* against the practitioner's written feedback and the evidence base — and caught a
+  genuine regression: **rigid scheduling copy had crept back into the UI**, exactly the thing the
+  practitioner flagged as instrumentalizing the person. It was removed. The audit did what a code
+  linter can't: enforce a *clinical* guideline against shipped strings.
+- **A security-audit agent.** A separate Claude pass audited the prompt-injection / untrusted-input
+  posture across every AI surface — wizard, grader, coach, vision, report — pressure-testing the
+  fencing, transcript-as-DATA, and server-side re-check defenses documented above.
+- **The submission judged by Claude — against the rubric.** Most distinctively: this writeup and the
+  film script were handed to a Claude model **role-played as a demanding hackathon judge**, scored
+  against the actual rubric, and **iterated twice against its scorecard** — writeup and script each
+  climbing several points across the passes (80→84, 82→85, and up). The judge's own critiques drove
+  the revisions.
+
+The through-line: Claude was the builder, the reviewer, the clinical-fidelity auditor, the security
+auditor, and the judge — a multi-agent process wrapped around a product whose most distinctive
+features are themselves agentic.
+
+*Targets: Claude Use (25%) — the multi-agent build itself, which the rubric explicitly rewards:
+Claude used to build, review, audit, and judge the product and its own submission.*
+
+---
+
 ## The science — why our design is evidence-driven
 
 Keepsake's design is not our first idea; it's the idea evidence-tested. The full trail
