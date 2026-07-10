@@ -1,0 +1,14 @@
+# Keep the CLI deploy upload small (the repo's non-build bulk). The Vercel build only needs
+# apps/web + the workspace packages; none of the below is imported by the Next build.
+.claude
+docs
+scratch
+*.md
+!README.md
+e2e
+**/*.test.ts
+**/*.test.tsx
+**/*.property.test.ts
+packages/db-tests
+supabase/.branches
+supabase/.temp
