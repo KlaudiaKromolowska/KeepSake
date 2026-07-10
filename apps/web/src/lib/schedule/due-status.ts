@@ -43,12 +43,13 @@ export function dueStatus(
   return { kind: "dueInDays", days, maintenance };
 }
 
-/** The one caregiver-facing line the dashboard renders for a status. */
+/**
+ * The one caregiver-facing line the dashboard renders for a status. Date-free by design (Monika's
+ * rule): the scheduler still computes exact due-ness above to SELECT and order targets, but a growing
+ * gap is never surfaced as a dated prompt — only whether the memory is settling in or holding well.
+ */
 export function dueStatusLine(status: DueStatus): string {
   if (status.kind === "acquisition") return SCHEDULE_COPY.acquisition;
   if (status.kind === "overdue") return SCHEDULE_COPY.overdue;
-  const copy = status.maintenance ? SCHEDULE_COPY.maintenance : SCHEDULE_COPY.practice;
-  if (status.kind === "dueToday") return copy.dueToday;
-  if (status.kind === "dueTomorrow") return copy.dueTomorrow;
-  return copy.dueInDays(status.days);
+  return status.maintenance ? SCHEDULE_COPY.maintenance : SCHEDULE_COPY.practice;
 }

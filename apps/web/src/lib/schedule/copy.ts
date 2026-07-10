@@ -5,18 +5,8 @@
 export const SCHEDULE_COPY = {
   acquisition: "Practising most days helps this memory settle in.",
   overdue: "Whenever you're ready — today is a good day.",
-  practice: {
-    dueToday: "Practice is due today.",
-    dueTomorrow: "The next practice is suggested tomorrow.",
-    dueInDays: (days: number) =>
-      `The next practice is suggested in ${days} days — the gap is growing, which is the goal.`,
-  },
-  maintenance: {
-    dueToday: "A gentle check-in is due today.",
-    dueTomorrow: "The next check-in is suggested tomorrow.",
-    dueInDays: (days: number) =>
-      `The next check-in is in ${days} days — this memory is holding well.`,
-  },
+  practice: "This memory is settling in — practise together whenever it suits you.",
+  maintenance: "This memory is holding well — a gentle moment together whenever it suits you.",
 } as const;
 
 // Every user-facing string for the schedule/plan page (/schedule). Same wellness-safe voice as
@@ -46,29 +36,20 @@ export const SCHEDULE_PLAN_COPY = {
   },
   stageStatus: { done: "Reached", current: "You are here", upcoming: "Ahead" },
 
-  windowHeading: "Next practice",
-  window: {
-    unscheduled: "Practising most days for now — a longer rhythm will appear here soon.",
-    overdue: "Whenever you're ready — today is a good day.",
-    today: "Suggested today.",
-    tomorrow: "Suggested tomorrow.",
-    weekday: (label: string) => `Suggested on ${label}.`,
-    inDays: (days: number) => `Suggested in ${days} days.`,
-  },
+  windowHeading: "Practising together",
+  window:
+    "Practise together whenever it suits you — the timing stays gentle, so there's never a date to chase.",
 
-  masteryHeading: "Settling-in progress",
+  masteryHeading: "Settling in",
   mastery: {
-    count: (done: number, total: number) =>
-      `${done} of ${total} calm start-of-session refreshers, on different days.`,
-    none: "Just getting started — the first calm refreshers are on their way.",
-    hint: "Three on different days means this memory is comfortably settled.",
-    settled: "Comfortably settled — now on the gentle check-in rhythm below.",
+    settling:
+      "This memory is still settling in — recalled at the start of some recent sessions on different days.",
+    settled: "Comfortably settled — recalled at the start of three sessions on different days.",
   },
 
-  boosterHeading: "The check-in rhythm ahead",
-  boosterIntro:
-    "Once settled, check-ins spread out — each one a little further apart, keeping the memory comfortable.",
-  boosterCurrent: "Now",
+  boosterHeading: "The rhythm ahead",
+  booster:
+    "Once a memory is settled, practising together naturally spreads further and further apart — each time a little longer than the last — so it stays comfortable with the lightest touch.",
   boosterHint:
     "If a check-in ever needs a little more practice, the rhythm simply eases back a step — always gentle.",
 } as const;

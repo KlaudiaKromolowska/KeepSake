@@ -2,14 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/actions";
 import { resolveActivePatient } from "@/lib/patients/active";
 import { SCHEDULE_PLAN_COPY as C } from "@/lib/schedule/copy";
-import {
-  type BoosterStep,
-  type JourneyStep,
-  type NextWindow,
-  type SchedulePlan,
-  schedulePlan,
-} from "@/lib/schedule/plan";
-import { srDefaultsForPatient } from "@/lib/sr/config";
+import { type JourneyStep, type SchedulePlan, schedulePlan } from "@/lib/schedule/plan";
 import { TARGETS_COPY } from "@/lib/targets/copy";
 import { classifyTargets, PRACTICABLE_STATUSES, type QueueTarget } from "@/lib/targets/queue";
 
@@ -61,7 +54,6 @@ export default async function SchedulePage() {
   if (rows.length === 0) return <Shell body={C.noTarget} />;
 
   const now = Date.now();
-  const { config } = srDefaultsForPatient(patient.etiology);
 
   const queueTargets: QueueTarget[] = rows.map((r) => ({
     id: r.id,
@@ -75,7 +67,6 @@ export default async function SchedulePage() {
   const phaseById = new Map(
     classifyTargets(queueTargets, now, patient.timezone).map((c) => [c.target.id, c.phase]),
   );
-  const rowById = new Map(rows.map((r) => [r.id, r]));
 
   const ordered = [...queueTargets].sort(
     (a, b) =>
@@ -85,30 +76,15 @@ export default async function SchedulePage() {
 
   return (
     <Shell>
-      {ordered.map((qt) => {
-        const st = rowById.get(qt.id)?.target_state;
-        const plan = schedulePlan(
-          {
-            scheduleMode: qt.scheduleMode,
-            nextDueAt: qt.nextDueAt,
-            masteredAt: qt.masteredAt,
-            startStreak: st?.start_streak ?? 0,
-            boosterStep: st?.booster_step ?? null,
-          },
-          config,
-          now,
-          patient.timezone,
-        );
-        return (
-          <TargetPlan
-            key={qt.id}
-            question={qt.question}
-            phaseLabel={TARGETS_COPY.phase[phaseById.get(qt.id) ?? "maintenance"].label}
-            plan={plan}
-            multi={ordered.length > 1}
-          />
-        );
-      })}
+      {ordered.map((qt) => (
+        <TargetPlan
+          key={qt.id}
+          question={qt.question}
+          phaseLabel={TARGETS_COPY.phase[phaseById.get(qt.id) ?? "maintenance"].label}
+          plan={schedulePlan({ masteredAt: qt.masteredAt })}
+          multi={ordered.length > 1}
+        />
+      ))}
     </Shell>
   );
 }
@@ -138,9 +114,9 @@ function TargetPlan({
         )}
       </div>
       <Journey steps={plan.steps} />
-      <NextPractice window={plan.window} />
-      <Mastery mastery={plan.mastery} />
-      <Booster steps={plan.booster} mastered={plan.mastered} />
+      <NextPractice />
+      <Mastery mastered={plan.mastered} />
+      <Booster mastered={plan.mastered} />
     </section>
   );
 }
@@ -180,84 +156,35 @@ function Journey({ steps }: { steps: JourneyStep[] }) {
   );
 }
 
-function NextPractice({ window }: { window: NextWindow }) {
-  const text =
-    window.kind === "weekday"
-      ? C.window.weekday(window.label)
-      : window.kind === "inDays"
-        ? C.window.inDays(window.days)
-        : C.window[window.kind];
+function NextPractice() {
   return (
     <section className="flex w-full flex-col gap-2" aria-labelledby="window-heading">
       <h2 id="window-heading" className="text-xl font-semibold">
         {C.windowHeading}
       </h2>
-      <p className="text-lg text-zinc-700">{text}</p>
+      <p className="text-lg text-zinc-700">{C.window}</p>
     </section>
   );
 }
 
-function Mastery({ mastery }: { mastery: SchedulePlan["mastery"] }) {
+function Mastery({ mastered }: { mastered: boolean }) {
   return (
     <section className="flex w-full flex-col gap-2" aria-labelledby="mastery-heading">
       <h2 id="mastery-heading" className="text-xl font-semibold">
         {C.masteryHeading}
       </h2>
-      {mastery === null ? (
-        <p className="text-lg text-zinc-700">{C.mastery.settled}</p>
-      ) : (
-        <>
-          <p className="text-lg text-zinc-700">
-            {mastery.done === 0 ? C.mastery.none : C.mastery.count(mastery.done, mastery.total)}
-          </p>
-          <ul className="flex gap-2" aria-hidden="true">
-            {Array.from({ length: mastery.total }, (_, i) => (
-              <li
-                // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length ordinal pips, no reordering
-                key={i}
-                className={`h-4 w-4 rounded-full border-2 border-zinc-900 ${
-                  i < mastery.done ? "bg-zinc-900" : "bg-white"
-                }`}
-              />
-            ))}
-          </ul>
-          <p className="text-base text-zinc-600">{C.mastery.hint}</p>
-        </>
-      )}
+      <p className="text-lg text-zinc-700">{mastered ? C.mastery.settled : C.mastery.settling}</p>
     </section>
   );
 }
 
-function Booster({ steps, mastered }: { steps: BoosterStep[]; mastered: boolean }) {
+function Booster({ mastered }: { mastered: boolean }) {
   return (
     <section className="flex w-full flex-col gap-3" aria-labelledby="booster-heading">
       <h2 id="booster-heading" className="text-xl font-semibold">
         {C.boosterHeading}
       </h2>
-      <p className="text-base text-zinc-700">{C.boosterIntro}</p>
-      <ol className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch">
-        {steps.map((step, i) => (
-          <li
-            key={step.label}
-            aria-current={step.current ? "step" : undefined}
-            className={`flex items-center gap-2 rounded-xl border px-4 py-3 ${
-              step.current ? "border-2 border-zinc-900 bg-zinc-50" : "border-zinc-300"
-            }`}
-          >
-            <span className="text-base text-zinc-500">{i + 1}.</span>
-            <span
-              className={`text-lg ${step.current ? "font-semibold text-zinc-900" : "text-zinc-800"}`}
-            >
-              {step.label}
-            </span>
-            {step.current && (
-              <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-sm font-semibold text-white">
-                {C.boosterCurrent}
-              </span>
-            )}
-          </li>
-        ))}
-      </ol>
+      <p className="text-base text-zinc-700">{C.booster}</p>
       {mastered && <p className="text-base text-zinc-600">{C.boosterHint}</p>}
     </section>
   );
