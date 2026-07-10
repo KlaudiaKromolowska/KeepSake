@@ -1,8 +1,7 @@
 # Practitioner feedback — 2026-07-08 (mid-build design input)
 
-**Source:** the Polish practitioner-trainer organisation that officially represents the SR
-adaptation for seniors with cognitive disability (Montessori Senior lineage — the same
-Camp/Brush tradition our protocol implements). Received by email in response to our Day-1
+**Source:** a practitioner-trainer organisation in the Camp/Brush tradition our protocol
+implements. Received by email in response to our Day-1
 outreach, while Phase 3 (session kiosk UI) was being planned — folded in before a single screen
 was built. *Consultant: Monika Stroińska, Centrum Montessori Senior — named with her explicit
 consent (2026-07-12).*

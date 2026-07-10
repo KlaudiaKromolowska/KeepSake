@@ -50,7 +50,7 @@ before anything is persisted or rendered (model output is never trusted). The hi
   accept. It only *suggests*; it never records an outcome or moves the ladder.
 - **The build itself** — Keepsake's design was shaped by a Claude Code **multi-agent literature review**
   (~10 parallel research agents) that overturned the initial design *twice*. Claude Code didn't just
-  write the app; it did the neuroscience review that reshaped it (see the [research trail](#the-research-trail)).
+  write the app; it did the neuroscience review that reshaped it (see the [research trail](./docs/research-trail.md)).
 
 Plus vision dual-coding photo QA, a visible-self-critique target wizard, extended-thinking etiology
 reasoning streamed on screen, personalized distractor generation, a private post-session debrief, and
@@ -73,7 +73,7 @@ booster-gated recognition lures. Full breakdown: [`docs/submission-writeup.md`](
 
 ## Trust signals
 
-- **972 passing tests** across `packages/core`, `apps/web`, and the RLS suite.
+- **970 passing tests** across `packages/core`, `apps/web`, and the RLS suite.
 - **A cross-tenant RLS denial suite** (89 tests) proves, for **every table**, that a caregiver reads
   their own data, can *never* touch another's, an anonymous client gets nothing, and `audit_log` is
   append-only.
@@ -87,9 +87,21 @@ booster-gated recognition lures. Full breakdown: [`docs/submission-writeup.md`](
 
 ---
 
+## Quickstart
+
+```bash
+pnpm install                       # Node >=24, pnpm 11
+cp .env.example .env.local         # then fill Supabase + ANTHROPIC_API_KEY (server-only)
+supabase start                     # local Postgres + Auth (EU-region schema, migrations in-repo)
+pnpm seed                          # seed the demo dyad (Marta → "Lena") + trial history
+pnpm dev                           # http://localhost:3000
+```
+
+---
+
 ## Docs
 
-- **[`docs/research-trail.md`](./docs/research-trail.md)** — <a name="the-research-trail"></a>the
+- **[`docs/research-trail.md`](./docs/research-trail.md)** — the
   evidence-driven design *reversals*: where the literature overturned our first ideas (FSRS → a
   deterministic ladder; a cueing hierarchy → errorless correction), plus the mid-build practitioner
   iteration.

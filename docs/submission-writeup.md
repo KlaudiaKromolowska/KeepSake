@@ -233,7 +233,7 @@ reviewed, audited, and judged** the product — and this very submission.
 - **The submission judged by Claude — against the rubric.** Most distinctively: this writeup and the
   film script were handed to a Claude model **role-played as a demanding hackathon judge**, scored
   against the actual rubric, and **iterated twice against its scorecard** — writeup and script each
-  climbing several points across the passes (80→84, 82→85, and up). The judge's own critiques drove
+  climbing several points across the passes (80→84, 82→85). The judge's own critiques drove
   the revisions.
 
 The through-line: Claude was the builder, the reviewer, the clinical-fidelity auditor, the security
@@ -358,7 +358,8 @@ could actually be piloted with real dyads under EU rules).*
 - **The engine is a genuinely pure, property-tested clinical state machine** — the correctness spine
   a memory-practice tool has to earn, not fake.
 - **Validated in-silico on n=1000 simulated patients** (`scripts/simulate.ts`; median time-to-
-  mastery ~23 days) — a sanity-check that the engine's dynamics behave sensibly, run against a
+  mastery ~24 days among targets that reach mastery within the 90-day simulation horizon) — a
+  sanity-check that the engine's dynamics behave sensibly, run against a
   deliberately illustrative, *uncalibrated* memory model. It is **not** evidence about real-patient
   recall.
 - **RCT-in-a-box actually runs.** Claude chooses and executes its own analyses over real logs and

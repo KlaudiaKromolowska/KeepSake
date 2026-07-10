@@ -33,7 +33,7 @@
 - [x] **0.4** Repo hygiene: MIT LICENSE ✓, README stub ✓, `docs/demo-video.md` v0 ✓ (script
   §16.4), CI workflow (biome + tsc + vitest + build) ✓ — badge once CI has run on main.
 - [ ] **0.5** Hackathon admin (external, time-sensitive — do not defer):
-  - [x] SLP outreach sent → **practitioner response received D2** (Centrum Montessori Senior —
+  - [x] SLP outreach sent → **practitioner response received D2** (a practitioner-trainer organisation —
     detailed feedback folded into Phase 3, see `docs/expert-feedback-2026-07-08.md`; consent
     ask for naming/quote drafted, ⚠️ human: send reply)
   - [ ] "New Work Only" scaffolding question in #questions
