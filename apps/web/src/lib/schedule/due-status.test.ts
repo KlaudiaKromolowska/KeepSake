@@ -80,23 +80,38 @@ describe("dueStatus", () => {
 describe("dueStatusLine", () => {
   const line = (s: DueStatus) => dueStatusLine(s);
 
-  it("maps every status to its copy", () => {
+  it("maps every status to its date-free copy", () => {
     expect(line({ kind: "acquisition" })).toBe(SCHEDULE_COPY.acquisition);
     expect(line({ kind: "overdue", maintenance: false })).toBe(SCHEDULE_COPY.overdue);
     expect(line({ kind: "overdue", maintenance: true })).toBe(SCHEDULE_COPY.overdue);
-    expect(line({ kind: "dueToday", maintenance: false })).toBe(SCHEDULE_COPY.practice.dueToday);
-    expect(line({ kind: "dueTomorrow", maintenance: false })).toBe(
-      SCHEDULE_COPY.practice.dueTomorrow,
-    );
-    expect(line({ kind: "dueInDays", days: 3, maintenance: false })).toBe(
-      SCHEDULE_COPY.practice.dueInDays(3),
-    );
-    expect(line({ kind: "dueToday", maintenance: true })).toBe(SCHEDULE_COPY.maintenance.dueToday);
-    expect(line({ kind: "dueTomorrow", maintenance: true })).toBe(
-      SCHEDULE_COPY.maintenance.dueTomorrow,
-    );
+    // Between-session (settling in) → the single practice line, regardless of the dated kind.
+    expect(line({ kind: "dueToday", maintenance: false })).toBe(SCHEDULE_COPY.practice);
+    expect(line({ kind: "dueTomorrow", maintenance: false })).toBe(SCHEDULE_COPY.practice);
+    expect(line({ kind: "dueInDays", days: 3, maintenance: false })).toBe(SCHEDULE_COPY.practice);
+    // Booster (holding well) → the single maintenance line, regardless of the dated kind.
+    expect(line({ kind: "dueToday", maintenance: true })).toBe(SCHEDULE_COPY.maintenance);
+    expect(line({ kind: "dueTomorrow", maintenance: true })).toBe(SCHEDULE_COPY.maintenance);
     expect(line({ kind: "dueInDays", days: 14, maintenance: true })).toBe(
-      SCHEDULE_COPY.maintenance.dueInDays(14),
+      SCHEDULE_COPY.maintenance,
     );
+  });
+
+  // Monika's rule: the between-session scheduler stays engine-only — no dated prompt or counter is
+  // ever surfaced. Guard every dashboard due-line against a leaked date/weekday/counter.
+  it("never surfaces a date, weekday, or counter to the caregiver", () => {
+    const statuses: DueStatus[] = [
+      { kind: "acquisition" },
+      { kind: "overdue", maintenance: false },
+      { kind: "overdue", maintenance: true },
+      { kind: "dueToday", maintenance: false },
+      { kind: "dueTomorrow", maintenance: false },
+      { kind: "dueInDays", days: 3, maintenance: false },
+      { kind: "dueToday", maintenance: true },
+      { kind: "dueTomorrow", maintenance: true },
+      { kind: "dueInDays", days: 14, maintenance: true },
+    ];
+    const banned =
+      /tomorrow|\bin \d+ days?\b|\d+ of \d+|monday|tuesday|wednesday|thursday|friday|saturday|sunday/i;
+    for (const s of statuses) expect(line(s)).not.toMatch(banned);
   });
 });

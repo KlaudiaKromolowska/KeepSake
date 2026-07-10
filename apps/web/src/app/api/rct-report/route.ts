@@ -2,6 +2,7 @@ import { z } from "zod";
 import { assertAiQuota, QuotaError } from "@/lib/ai/core";
 import { buildRctInputs } from "@/lib/ai/rct-data";
 import { runRctReport } from "@/lib/ai/rct-report";
+import { resolveActivePatient } from "@/lib/patients/active";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -46,15 +47,16 @@ export async function POST(request: Request): Promise<Response> {
     return jsonError("The report isn't available right now.", 503);
   }
 
-  // RLS scopes every read below to the caller's own patient/rows.
-  const { data: patient, error: patientErr } = await supabase
-    .from("patients")
-    .select("id, display_name, etiology, timezone")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (patientErr) return jsonError("The report isn't available right now.", 503);
-  if (!patient) return jsonError("There's no practice data to analyze yet.", 404);
+  // RLS scopes every read below to the caller's own patient/rows. Analyze the ACTIVE (cookie-selected)
+  // patient — not the oldest — so a multi-patient caregiver reports on the patient they switched to.
+  const active = await resolveActivePatient(supabase, user.id);
+  if (!active) return jsonError("There's no practice data to analyze yet.", 404);
+  const patient = {
+    id: active.id,
+    display_name: active.displayName,
+    etiology: active.etiology,
+    timezone: active.timezone,
+  };
 
   const [targetsRes, statesRes, sessionsRes] = await Promise.all([
     supabase

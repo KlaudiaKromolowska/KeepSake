@@ -1,5 +1,6 @@
 import { toCsv } from "@/lib/export/csv";
 import { buildTrialCsvRows, TRIAL_CSV_HEADER } from "@/lib/export/trial-export";
+import { resolveActivePatient } from "@/lib/patients/active";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -22,14 +23,9 @@ export async function GET(): Promise<Response> {
   } = await supabase.auth.getUser();
   if (!user) return textError("Please sign in again to export data.", 401);
 
-  // RLS scopes every read below to the caller's own patient/rows.
-  const { data: patient, error: patientErr } = await supabase
-    .from("patients")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (patientErr) return textError("Export isn't available right now.", 503);
+  // RLS scopes every read below to the caller's own patient/rows. Export the ACTIVE (cookie-selected)
+  // patient — not the oldest — so a multi-patient caregiver never downloads the wrong patient's CSV.
+  const patient = await resolveActivePatient(supabase, user.id);
   if (!patient) return textError("There's no practice data to export yet.", 404);
 
   const [targetsRes, sessionsRes] = await Promise.all([

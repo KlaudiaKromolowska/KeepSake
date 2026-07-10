@@ -3,6 +3,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { createClientMock } = vi.hoisted(() => ({ createClientMock: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: createClientMock }));
 
+// resolveActivePatient reads the active-patient cookie from next/headers.
+const { cookiesMock, setActiveCookie } = vi.hoisted(() => {
+  let active: string | undefined;
+  return {
+    cookiesMock: vi.fn(async () => ({
+      get: (_name: string) => (active ? { value: active } : undefined),
+    })),
+    setActiveCookie: (v: string | undefined) => {
+      active = v;
+    },
+  };
+});
+vi.mock("next/headers", () => ({ cookies: cookiesMock }));
+
 import { GET } from "./route";
 
 /** Chainable query stub: every filter returns `this`; awaiting or maybeSingle yields `result`. */
@@ -28,7 +42,11 @@ interface FakeOpts {
 }
 
 function fakeSupabase(opts: FakeOpts) {
-  const patient = opts.patient ?? { data: { id: "p1" }, error: null };
+  // patients read returns an ARRAY (listOwnedPatients maps over it, oldest first).
+  const patient = opts.patient ?? {
+    data: [{ id: "p1", display_name: "Pat", timezone: "UTC", etiology: "alzheimers" }],
+    error: null,
+  };
   const defaults: Record<string, { data: unknown; error: unknown }> = {
     targets: { data: [], error: null },
     sessions: { data: [], error: null },
@@ -50,6 +68,7 @@ function fakeSupabase(opts: FakeOpts) {
 beforeEach(() => {
   vi.clearAllMocks();
   calls = [];
+  setActiveCookie(undefined);
   createClientMock.mockResolvedValue(fakeSupabase({}));
 });
 afterEach(() => vi.restoreAllMocks());
@@ -64,15 +83,15 @@ describe("GET /api/export — auth gating", () => {
   });
 
   it("404 when the caller has no patient/data yet", async () => {
-    createClientMock.mockResolvedValue(fakeSupabase({ patient: { data: null, error: null } }));
+    createClientMock.mockResolvedValue(fakeSupabase({ patient: { data: [], error: null } }));
     expect((await GET()).status).toBe(404);
   });
 
-  it("503 when the patient read errors", async () => {
+  it("404 when the patient read errors (resolveActivePatient collapses error → no active patient)", async () => {
     createClientMock.mockResolvedValue(
       fakeSupabase({ patient: { data: null, error: { message: "boom" } } }),
     );
-    expect((await GET()).status).toBe(503);
+    expect((await GET()).status).toBe(404);
   });
 
   it("503 when a downstream read errors", async () => {
@@ -140,6 +159,30 @@ describe("GET /api/export — CSV content and headers", () => {
     // trials are scoped through the patient's own session ids, never queried unfiltered.
     const inCalls = calls.filter((c) => c.method === "in");
     expect(inCalls).toContainEqual({ method: "in", args: ["session_id", ["s1"]] });
+  });
+
+  it("exports the ACTIVE (cookie-selected) patient, not the oldest owned one", async () => {
+    createClientMock.mockResolvedValue(
+      fakeSupabase({
+        patient: {
+          data: [
+            { id: "p_old", display_name: "Old", timezone: "UTC", etiology: "alzheimers" },
+            { id: "p_new", display_name: "New", timezone: "UTC", etiology: "alzheimers" },
+          ],
+          error: null,
+        },
+        tables: {
+          targets: { data: targets, error: null },
+          sessions: { data: sessions, error: null },
+          trials: { data: trials, error: null },
+        },
+      }),
+    );
+    setActiveCookie("p_new");
+    await GET();
+    const eqCalls = calls.filter((c) => c.method === "eq");
+    expect(eqCalls).toContainEqual({ method: "eq", args: ["patient_id", "p_new"] });
+    expect(eqCalls).not.toContainEqual({ method: "eq", args: ["patient_id", "p_old"] });
   });
 
   it("writes a best-effort data_export audit_log row for the caller's own caregiver_id", async () => {

@@ -49,7 +49,7 @@ export function ProbeScreen({
       {imageUrl && !imageFailed && (
         <Image
           src={imageUrl}
-          alt={question}
+          alt={SESSION_COPY.shared.imageAlt}
           width={480}
           height={480}
           className="max-h-[40vh] w-auto rounded-3xl object-contain"
@@ -67,7 +67,9 @@ export function ProbeScreen({
         </>
       ) : (
         <>
-          <p className="text-2xl text-zinc-700">{SESSION_COPY.probe.caregiverPrompt}</p>
+          <p id="outcome-instruction" className="text-2xl text-zinc-700">
+            {SESSION_COPY.probe.caregiverPrompt}
+          </p>
           <p className="text-xl text-zinc-700">
             {SESSION_COPY.probe.answerHint} <strong className="text-zinc-900">{answer}</strong>
           </p>
@@ -79,7 +81,9 @@ export function ProbeScreen({
               {suggestion === "miss" && SESSION_COPY.speech.heardMiss}
             </p>
           )}
-          <OutcomeButtons onOutcome={onOutcome} suggested={suggestion} />
+          <fieldset className="contents" aria-describedby="outcome-instruction">
+            <OutcomeButtons onOutcome={onOutcome} suggested={suggestion} />
+          </fieldset>
         </>
       )}
     </section>

@@ -25,9 +25,8 @@ export const TARGETS_COPY = {
   summaryLine(s: QueueSummary): string {
     if (s.total === 0) return "";
     const parts: string[] = [];
-    if (s.dueNow === 1) parts.push("1 memory to practise today");
-    else if (s.dueNow > 1) parts.push(`${s.dueNow} memories to practise today`);
-    else parts.push("Nothing due today");
+    if (s.dueNow === 1) parts.push("1 memory in practice");
+    else if (s.dueNow > 1) parts.push(`${s.dueNow} memories in practice`);
     if (s.queued === 1) parts.push("1 waiting its turn");
     else if (s.queued > 1) parts.push(`${s.queued} waiting their turn`);
     return parts.join(" · ");

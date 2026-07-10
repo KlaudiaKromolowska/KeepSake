@@ -18,10 +18,25 @@ const SECONDARY_BUTTON =
  * comment) via a ReadableStream reader, so the note appears word-by-word rather than as one
  * blocking wait. Never shown to the patient.
  */
-export function DebriefPanel({ sessionId }: { sessionId: string }) {
+export function DebriefPanel({
+  sessionId,
+  trials,
+  recalls,
+}: {
+  sessionId: string;
+  trials: number;
+  recalls: number;
+}) {
   const [status, setStatus] = useState<Status>("idle");
   const [text, setText] = useState("");
   const [copied, setCopied] = useState(false);
+
+  // Raw counts belong here, in the caregiver-only debrief — never on the patient-facing summary.
+  const tally = (
+    <p className="tabular-nums text-lg text-zinc-600">
+      {SESSION_COPY.debrief.tally(trials, recalls)}
+    </p>
+  );
 
   const start = useCallback(async () => {
     setStatus("streaming");
@@ -56,14 +71,18 @@ export function DebriefPanel({ sessionId }: { sessionId: string }) {
 
   if (status === "idle") {
     return (
-      <button type="button" onClick={start} className={OPEN_BUTTON}>
-        {SESSION_COPY.debrief.open}
-      </button>
+      <div className="flex w-full max-w-xl flex-col items-center gap-3">
+        {tally}
+        <button type="button" onClick={start} className={OPEN_BUTTON}>
+          {SESSION_COPY.debrief.open}
+        </button>
+      </div>
     );
   }
 
   return (
     <div className="flex w-full max-w-xl flex-col items-start gap-3">
+      {tally}
       <h2 className="text-xl font-medium text-zinc-900">{SESSION_COPY.debrief.heading}</h2>
       <div
         role="log"

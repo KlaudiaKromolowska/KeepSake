@@ -40,9 +40,7 @@ export function EndScreen({
       <h1 tabIndex={-1} className="text-3xl font-semibold">
         {SESSION_COPY.ended.heading}
       </h1>
-      <p className="tabular-nums text-2xl text-zinc-700">
-        {SESSION_COPY.ended.stats(trials, recalls)}
-      </p>
+      <p className="text-2xl text-zinc-700">{SESSION_COPY.ended.togetherLine}</p>
 
       <p className="flex items-center gap-3 text-2xl text-zinc-700">
         {mastered && <LaurelIcon />}
@@ -73,7 +71,7 @@ export function EndScreen({
         </p>
       )}
 
-      <DebriefPanel sessionId={sessionId} />
+      <DebriefPanel sessionId={sessionId} trials={trials} recalls={recalls} />
 
       <div className="flex w-full max-w-xl flex-col items-start gap-3">
         <label htmlFor="session-note" className="text-xl text-zinc-700">
@@ -103,7 +101,7 @@ export function EndScreen({
             </span>
           )}
           {status === "error" && (
-            <span role="status" className="flex items-center gap-3 text-xl text-zinc-700">
+            <span role="alert" className="flex items-center gap-3 text-xl text-zinc-700">
               {SESSION_COPY.shared.saveError}
               <button
                 type="button"
