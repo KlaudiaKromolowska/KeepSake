@@ -79,3 +79,43 @@ Everything in the 1:10–2:40 block is **real screen-capture of the deployed pro
 ## VO word count
 
 Total spoken VO = **351 words** (target ~350–360; trimmed from 404; the ~47-word coach/grader montage narration was cut and replaced by a held, near-silent self-critique shot that lets the screen do the work). Beat breakdown: hook 23 · problem 31 · strain 38 · neuroscience 39 · key-move 25 · demo-probe 26 · demo-miss 31 · demo-distractor 30 · self-critique 0 (silent) · jaw-drop 55 · credibility 31 · close 22.
+
+---
+
+## Production & visual style
+
+**North star: warm-premium, human-first.** This is a film about a daughter and her mother — warmth
+leads; the modern, smooth, high-production polish *serves* the emotion, it never turns the piece
+cold or clinical. Reference feel: Apple's accessibility films and calm health-tech — confident,
+minimal, lots of negative space, quietly sophisticated. NOT a peppy SaaS explainer.
+
+**One warm palette, two registers.** Everything shares a single warm, high-key grade (soft
+contrast, gentle amber/emerald accents pulled from the app; deep blacks avoided). Within it:
+- *Human beats* (kitchen, the miss→correction, "Lena") — intimate, **shallow depth of field**,
+  natural window light, handheld-but-steady, held longer. Warmest.
+- *Product / Claude beats* (kiosk UI, `/review`, n=1→n=1000) — clean, smooth, precise, "floaty" —
+  but rendered in the SAME warm palette so the technology reads as **trustworthy and calm**, not
+  sci-fi. The tech is impressive *because* it feels gentle.
+
+**Screen capture (the demo + Claude beats).**
+- Record at 2×/Retina, export 4K → 1080p; **60 fps** so the UI feels buttery-smooth.
+- Fullscreen kiosk — **no browser chrome**; **force the light theme**; hide the cursor or replace it
+  with a soft highlight dot. Use `DEMO_SPEED=60` for pacing (already live on prod).
+- Never show a raw browser window: **float the kiosk UI on a soft warm gradient / in a subtle device
+  frame**. A gentle **parallax push-in** on the money moments — the answer reveal, and `/review`'s
+  *"How this report was produced"* expanding. **Ease-in-out** on every UI transition; never a hard
+  cut mid-interaction.
+
+**Typography & motion.** Kinetic lower-thirds that **ease in** with generous margins, one clean sans
+(the app's Geist). Restraint over flash — one motion idea per beat. The **n=1 → n=1000** figure
+counts up.
+
+**Sound.** Modern-minimal score — soft piano + warm pads + a subtle pulse under the tech beats —
+ducked well under the warm ElevenLabs VO. **Honor the scripted 3–4s silences** on the correction and
+on "Lena": silence reads as premium and confident, and it's where the film earns its emotion.
+
+**Cutting rhythm.** Brisk and beat-synced through the tech beats; **slow and held** on the human
+ones. The contrast is the point — competence in the head, warmth in the heart.
+
+**Bookends.** Cold open with no logo (per the shot list); end card clean and warm — single logo,
+lots of space, one line of text. Let it breathe out.
