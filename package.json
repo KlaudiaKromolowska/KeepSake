@@ -21,7 +21,8 @@
     "fixtures:record": "tsx --tsconfig apps/web/tsconfig.json scripts/record-fixtures.ts",
     "audio:generate": "tsx --tsconfig apps/web/tsconfig.json scripts/generate-audio.ts",
     "audio:generate:eleven": "tsx --tsconfig apps/web/tsconfig.json scripts/generate-audio-elevenlabs.ts",
-    "film:capture": "tsx apps/web/scripts/film-capture.ts"
+    "film:capture": "tsx apps/web/scripts/film-capture.ts",
+    "film:soft-scenes": "tsx apps/web/scripts/generate-soft-scenes.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.0",
