@@ -30,6 +30,10 @@ beat() {
     ffmpeg -y -loglevel error -f lavfi -i "color=c=0x1f1f1f:s=1920x1080:r=30:d=$d" -i "$nar" \
       -vf "drawtext=fontfile='$FONT':text='${src#SLATE:}':fontcolor=0xE9E2D6:fontsize=52:x=(w-text_w)/2:y=(h-text_h)/2" \
       -map 0:v -map 1:a -t "$d" -c:v libx264 -pix_fmt yuv420p -r 30 -c:a aac -ar 44100 "$out"
+  elif [[ "$src" == IMG:* ]]; then  # a still image (Canva slide) held for the beat duration
+    ffmpeg -y -loglevel error -loop 1 -i "${src#IMG:}" -i "$nar" \
+      -filter_complex "[0:v]$V[v];[1:a]apad[a]" \
+      -map "[v]" -map "[a]" -t "$d" -c:v libx264 -pix_fmt yuv420p -r 30 -c:a aac -ar 44100 "$out"
   else
     ffmpeg -y -loglevel error -i "$src" -i "$nar" \
       -filter_complex "[0:v]$V,tpad=stop_mode=clone:stop_duration=$d,trim=duration=$d,setpts=PTS-STARTPTS[v];[1:a]apad[a]" \
@@ -41,11 +45,11 @@ beat() {
 beat 01-hook       "$SOFT/01-hook-a.mp4"  "$NAR/01-hook.mp3"
 beat 02-problem    "$SOFT/03-problem.mp4" "$NAR/02-problem.mp3"
 beat 03-strain     "$SOFT/04-strain.mp4"  "$NAR/03-strain.mp3"
-beat 04-neuro      "SLATE:NEUROSCIENCE - motion graphic" "$NAR/04-neuroscience.mp3"
-beat 05-keymove    "SLATE:the device is the therapist"  "$NAR/05-keymove.mp3"
+beat 04-neuro      "IMG:$CAP/canva-slides/neuroscience.png" "$NAR/04-neuroscience.mp3"
+beat 05-keymove    "IMG:$CAP/canva-slides/keymove.png"      "$NAR/05-keymove.mp3"
 beat 06-demo       "$SESSION" "$NAR/06-demo-probe.mp3" "$NAR/07-demo-miss.mp3" "$NAR/08-demo-distractor.mp3"
 beat 07-jawdrop    "$REVIEW"  "$NAR/09-jawdrop.mp3"
-beat 08-credibility "SLATE:evidence-driven - practitioner-validated" "$NAR/10-credibility.mp3"
+beat 08-credibility "IMG:$CAP/canva-slides/credibility.png" "$NAR/10-credibility.mp3"
 beat 09-close      "$SOFT/05-close.mp4"   "$NAR/11-close.mp3"
 
 echo "concatenating..."
