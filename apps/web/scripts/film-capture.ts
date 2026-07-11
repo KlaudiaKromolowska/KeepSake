@@ -58,32 +58,33 @@ async function sessionBeat(page: Page): Promise<void> {
   // Skip the mood check-in so the never-cut chain stays on the probe→correction→recall arc.
   await page.getByRole("button", { name: "Skip this" }).click();
 
-  // Session-start probe — the warm narration audio plays here; hold to let it breathe.
+  // Session-start probe — the warm narration plays here; hold LONG so the question + answer are
+  // comfortably readable on camera (the film's app beat was rushing before).
   await page.getByRole("heading", { name: "Time to ask" }).waitFor({ timeout: 25_000 });
-  await hold(page, 3500);
+  await hold(page, 7000);
 
   // Miss → the DEVICE delivers the errorless correction (the emotional core — hold on it).
   await page.getByRole("button", { name: "Not this time" }).click();
   await page.getByRole("heading", { name: "Here's the answer" }).waitFor({ timeout: 10_000 });
-  await hold(page, 4000);
+  await hold(page, 7000);
   await page.getByRole("button", { name: "We said it together" }).click();
 
   // Distractor — hold, then close onto the guaranteed final win. Ending via "End session" (instead of
   // waiting out a full second interval, which for a booster target can be 51s+) keeps the capture
   // robust to any gap length and still shows the "she remembers" win. Mirrors the passing e2e.
   await page.getByRole("heading", { name: "While we wait" }).waitFor({ timeout: 12_000 });
-  await hold(page, 3000);
+  await hold(page, 5000);
   await page.getByRole("button", { name: "End session" }).click();
 
   const oneMore = page.getByRole("heading", { name: "One more time — together" });
   const complete = page.getByRole("heading", { name: "Session complete" });
   await oneMore.or(complete).waitFor({ timeout: 20_000 });
   if (await oneMore.isVisible()) {
-    await hold(page, 3500);
+    await hold(page, 6000);
     await page.getByRole("button", { name: "We said it" }).click();
   }
   await complete.waitFor({ timeout: 15_000 });
-  await hold(page, 4000);
+  await hold(page, 6000);
 }
 
 /** Clip 2 — the jaw-drop: the agentic /review report (real Claude) + its "how it was produced" trail. */

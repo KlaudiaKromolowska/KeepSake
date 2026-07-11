@@ -33,7 +33,17 @@ beat() {
   else
     local ss=0 file
     if [[ "$src" == VIDSS:* ]]; then local rest="${src#VIDSS:}"; file="${rest%:*}"; ss="${rest##*:}"; else file="${src#VID:}"; fi
-    local vf="$FILL,$GRADE,tpad=stop_mode=clone:stop_duration=$d,trim=duration=$d,setpts=PTS-STARTPTS,fade=t=in:st=0:d=0.4,fade=t=out:st=$fo:d=0.4"
+    local cd tail; cd="$(python3 -c "print(round($(dur "$file")-$ss,3))")"; tail="$(python3 -c "print(round(max(0,$d-$cd),3))")"
+    local base="$FILL,tpad=stop_mode=clone:stop_duration=$tail,trim=duration=$d,setpts=PTS-STARTPTS"
+    local vf
+    if [ "$(python3 -c "print(1 if $tail>2 else 0)")" = "1" ]; then
+      # Short soft-scene clip: natural speed, then a gentle push-in on the held tail — never a dead freeze.
+      local zinc; zinc="$(python3 -c "print(round(0.10/($d*30),7))")"
+      vf="$base,zoompan=z='min(zoom+$zinc,1.11)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':fps=30:s=1920x1080,$GRADE,fade=t=in:st=0:d=0.4,fade=t=out:st=$fo:d=0.4"
+    else
+      # Long app footage: keep it CRISP and readable — no zoom (zoom softens UI text) — just grade.
+      vf="$base,$GRADE,fade=t=in:st=0:d=0.4,fade=t=out:st=$fo:d=0.4"
+    fi
     ffmpeg -y -loglevel error -ss "$ss" -i "$file" -i "$nar" -filter_complex "[0:v]$vf[v];[1:a]$af[a]" -map "[v]" -map "[a]" -t "$d" -c:v libx264 -pix_fmt yuv420p -r 30 -c:a aac -ar 44100 "$out"
   fi
   printf "file '%s'\n" "$name.mp4" >> "$SEG/list.txt"; echo "  ok $name (${d}s)"
