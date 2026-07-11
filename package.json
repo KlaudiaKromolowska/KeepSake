@@ -25,7 +25,8 @@
     "film:soft-scenes": "tsx apps/web/scripts/generate-soft-scenes.ts",
     "film:narration": "tsx apps/web/scripts/generate-narration.ts",
     "film:rough-cut": "bash scripts/assemble-rough-cut.sh",
-    "film:polished": "bash scripts/assemble-polished.sh"
+    "film:polished": "bash scripts/assemble-polished.sh",
+    "film:steps": "tsx apps/web/scripts/film-capture-steps.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.0",
