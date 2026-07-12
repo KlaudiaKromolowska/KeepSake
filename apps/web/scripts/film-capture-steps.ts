@@ -67,9 +67,13 @@ async function record(
           { encoding: "utf-8" },
         ).stdout.trim(),
       );
+      // Clips must butt-join: each starts PRE_ROLL before its mark, so the previous clip must END
+      // at that same point — ending at the next mark itself would duplicate the boundary 0.3s and
+      // play as a backwards "blink" when the clips sit consecutively on a timeline.
+      const PRE_ROLL = 0.3;
       for (let i = 0; i < marks.length; i++) {
-        const start = Math.max(0, marks[i].t / 1000 - 0.3);
-        const end = i + 1 < marks.length ? marks[i + 1].t / 1000 : total;
+        const start = Math.max(0, marks[i].t / 1000 - PRE_ROLL);
+        const end = i + 1 < marks.length ? marks[i + 1].t / 1000 - PRE_ROLL : total;
         const dur = Math.max(0.6, end - start);
         const out = join(OUT, `${marks[i].name}.mp4`);
         spawnSync("ffmpeg", [
