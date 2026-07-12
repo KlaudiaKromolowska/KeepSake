@@ -3,25 +3,25 @@
     "n": 1000,
     "seed": 42,
     "horizonDays": 90,
-    "generatedAt": "2026-07-08T20:38:27.154Z",
-    "simulationRuntimeMs": 965
+    "generatedAt": "2026-07-10T18:32:21.194Z",
+    "simulationRuntimeMs": 1014
   },
   "overall": {
-    "candidacyPassRate": 0.43,
+    "candidacyPassRate": 0.42,
     "statusCounts": {
-      "not_candidate": 568,
-      "acquiring": 25,
-      "mastered": 262,
-      "rescoped": 145
+      "not_candidate": 576,
+      "acquiring": 32,
+      "mastered": 233,
+      "rescoped": 159
     },
     "timeToMasteryDays": {
-      "n": 262,
-      "meanDays": 29.5,
+      "n": 233,
+      "meanDays": 30.04,
       "p10": 6.5,
       "p25": 13.75,
-      "p50": 23.25,
-      "p75": 40.75,
-      "p90": 60.5,
+      "p50": 23.75,
+      "p75": 44,
+      "p90": 67.75,
       "minDays": 3,
       "maxDays": 89.09
     }
@@ -29,128 +29,128 @@
   "perEtiology": [
     {
       "etiology": "alzheimers",
-      "n": 164,
-      "candidacyPassRate": 0.53,
-      "masteredRateOfCandidates": 0.61,
+      "n": 158,
+      "candidacyPassRate": 0.59,
+      "masteredRateOfCandidates": 0.59,
       "rescopedRateOfCandidates": 0.32,
       "timeToMasteryDays": {
-        "n": 53,
-        "meanDays": 27.38,
+        "n": 55,
+        "meanDays": 26.42,
         "p10": 6,
-        "p25": 13.09375,
-        "p50": 23,
-        "p75": 34.75,
-        "p90": 60.25,
+        "p25": 13.5,
+        "p50": 20.75,
+        "p75": 34,
+        "p90": 56.09375,
         "minDays": 3,
         "maxDays": 84.75
       }
     },
     {
       "etiology": "lewy",
-      "n": 159,
-      "candidacyPassRate": 0.28,
-      "masteredRateOfCandidates": 0.76,
-      "rescopedRateOfCandidates": 0.16,
+      "n": 173,
+      "candidacyPassRate": 0.27,
+      "masteredRateOfCandidates": 0.74,
+      "rescopedRateOfCandidates": 0.17,
       "timeToMasteryDays": {
-        "n": 34,
-        "meanDays": 27.67,
-        "p10": 6.5,
-        "p25": 16.75,
-        "p50": 20.25,
-        "p75": 41.5,
-        "p90": 54.75,
-        "minDays": 4,
-        "maxDays": 65.5
+        "n": 35,
+        "meanDays": 24.99,
+        "p10": 7.75,
+        "p25": 9.75,
+        "p50": 15.25,
+        "p75": 33.5,
+        "p90": 56.59375,
+        "minDays": 5,
+        "maxDays": 82.59
       }
     },
     {
       "etiology": "mixed",
-      "n": 164,
-      "candidacyPassRate": 0.41,
-      "masteredRateOfCandidates": 0.59,
-      "rescopedRateOfCandidates": 0.41,
+      "n": 167,
+      "candidacyPassRate": 0.39,
+      "masteredRateOfCandidates": 0.37,
+      "rescopedRateOfCandidates": 0.58,
       "timeToMasteryDays": {
-        "n": 40,
-        "meanDays": 29.12,
-        "p10": 6,
-        "p25": 15.5,
-        "p50": 22.75,
-        "p75": 43.75,
-        "p90": 56.3125,
+        "n": 24,
+        "meanDays": 30.76,
+        "p10": 5.5,
+        "p25": 17.25,
+        "p50": 25.5,
+        "p75": 45.75,
+        "p90": 62.125,
         "minDays": 3.5,
-        "maxDays": 88.31
+        "maxDays": 86.59
       }
     },
     {
       "etiology": "parkinsons",
-      "n": 171,
+      "n": 168,
       "candidacyPassRate": 0.36,
-      "masteredRateOfCandidates": 0.74,
-      "rescopedRateOfCandidates": 0.24,
+      "masteredRateOfCandidates": 0.63,
+      "rescopedRateOfCandidates": 0.3,
       "timeToMasteryDays": {
-        "n": 46,
-        "meanDays": 24.64,
-        "p10": 4.5,
-        "p25": 11.25,
-        "p50": 19,
-        "p75": 30.25,
-        "p90": 67.75,
-        "minDays": 3,
+        "n": 38,
+        "meanDays": 30.57,
+        "p10": 8.75,
+        "p25": 13.75,
+        "p50": 25.25,
+        "p75": 43,
+        "p90": 68.75,
+        "minDays": 4.5,
         "maxDays": 85.13
       }
     },
     {
       "etiology": "unspecified",
-      "n": 158,
-      "candidacyPassRate": 0.52,
-      "masteredRateOfCandidates": 0.44,
-      "rescopedRateOfCandidates": 0.45,
+      "n": 147,
+      "candidacyPassRate": 0.5,
+      "masteredRateOfCandidates": 0.56,
+      "rescopedRateOfCandidates": 0.38,
       "timeToMasteryDays": {
-        "n": 36,
-        "meanDays": 32.74,
-        "p10": 11,
-        "p25": 20.75,
-        "p50": 27.25,
-        "p75": 40.5,
-        "p90": 65.25,
-        "minDays": 6.5,
-        "maxDays": 88.59
+        "n": 41,
+        "meanDays": 32.01,
+        "p10": 6.5,
+        "p25": 11.75,
+        "p50": 24.75,
+        "p75": 48.25,
+        "p90": 69.75,
+        "minDays": 3.5,
+        "maxDays": 89.09
       }
     },
     {
       "etiology": "vascular",
-      "n": 184,
-      "candidacyPassRate": 0.48,
-      "masteredRateOfCandidates": 0.6,
-      "rescopedRateOfCandidates": 0.34,
+      "n": 187,
+      "candidacyPassRate": 0.46,
+      "masteredRateOfCandidates": 0.47,
+      "rescopedRateOfCandidates": 0.43,
       "timeToMasteryDays": {
-        "n": 53,
-        "meanDays": 35.11,
-        "p10": 6.75,
-        "p25": 18.25,
-        "p50": 30.75,
-        "p75": 46.5,
-        "p90": 71.8125,
-        "minDays": 3.5,
-        "maxDays": 89.09
+        "n": 40,
+        "meanDays": 36.48,
+        "p10": 5.5,
+        "p25": 18.5,
+        "p50": 32.25,
+        "p75": 52.59375,
+        "p90": 75.75,
+        "minDays": 3,
+        "maxDays": 85.09
       }
     }
   ],
   "boosterSurvival": [
     {
       "cadenceDaysNominal": 7,
-      "n": 1444,
-      "recallRate": 0.82
+      "n": 450,
+      "recallRate": 0.62
     },
     {
       "cadenceDaysNominal": 14,
-      "n": 165,
-      "recallRate": 0.73
+      "n": 270,
+      "recallRate": 0.75
     },
     {
       "cadenceDaysNominal": 30,
-      "n": 54,
-      "recallRate": 0.83
+      "n": 127,
+      "recallRate": 0.8
     },
     {
       "cadenceDaysNominal": 90,
@@ -165,31 +165,31 @@
     },
     {
       "label": "10-20s",
-      "count": 1910
+      "count": 2094
     },
     {
       "label": "20-40s",
-      "count": 9074
+      "count": 9066
     },
     {
       "label": "40-80s",
-      "count": 10402
+      "count": 10321
     },
     {
       "label": "80-160s",
-      "count": 6895
+      "count": 5695
     },
     {
       "label": "160-320s",
-      "count": 7237
+      "count": 7438
     },
     {
       "label": "320-640s",
-      "count": 6530
+      "count": 7465
     },
     {
       "label": "640-1000s",
-      "count": 7854
+      "count": 8050
     }
   ]
 }

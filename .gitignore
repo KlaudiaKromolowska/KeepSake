@@ -54,3 +54,6 @@ scratch/
 
 # Private outreach - never publish
 docs/slp-outreach.md
+
+# Film capture output (large binaries — never commit)
+film-captures/

@@ -10,8 +10,8 @@
 >
 > **VO:** written to be spoken (ElevenLabs) — warm, clear, unhurried. Total = **404 words** (fits
 > ~3:00 at a calm ~135 wpm with the "let it breathe" pauses in the session beat).
-> **Voices:** one warm narrator throughout; the practitioner-organisation line is narrator-read
-> (name/quotes are consent-pending — refer to "a practitioner-trainer organisation", never a person).
+> **Voices:** one warm narrator throughout; the practitioner line was recorded organisation-generic.
+> (Naming consent landed 2026-07-12 — written materials name Monika Stroińska, Centrum Montessori Senior.)
 
 ---
 
@@ -67,7 +67,7 @@ Everything in the 1:10–2:40 block is **real screen-capture of the deployed pro
 - **Disclaimer on screen at close:** *fictional persona · not a medical device* (submission-checklist requirement). Persona = consented/fictional "Marta & Lena", never real patient data.
 
 ### Consent / accuracy guardrails
-- The practitioner-organisation validation is a **real credibility beat** but name + direct quotes are **consent-pending** — keep it as "a practitioner-trainer organisation in the Montessori-Senior / Camp lineage." Do not name the person or paste a quote until consent lands (see `docs/expert-feedback-2026-07-08.md`).
+- The practitioner validation is a **real credibility beat**. Consent to name her landed 2026-07-12: **Monika Stroińska, Centrum Montessori Senior** may be named explicitly in submission materials (see `docs/expert-feedback-2026-07-08.md`). The rendered film's narrator line stays organisation-generic (already recorded); written materials use her name.
 - Every on-screen UI string in this script matches the real app copy (`SESSION_COPY`, `REVIEW_COPY`) — if copy changes before the shoot, re-verify the lower-thirds against the source.
 - Claude-usage lower-thirds are accurate to the build: **Sonnet** = target generation + reports; **Haiku** = real-time grading; agentic `/review` selects & runs its own typed analytics tools. Keep the README Claude-usage map in sync.
 
