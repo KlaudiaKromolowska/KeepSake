@@ -84,6 +84,10 @@ booster-gated recognition lures. Full breakdown: [`docs/submission-writeup.md`](
 - **GDPR Article 9 posture** — RLS as the security boundary on every table, secrets server-only,
   auth-gated + rate-limited AI routes, hard delete with `ON DELETE CASCADE`, a separate append-only
   audit log, and strict data minimization into every Claude prompt.
+- **Practitioner-validated mid-build** — [Monika Stroińska (Centrum Montessori
+  Senior)](docs/expert-feedback-2026-07-08.md), who trains the SR-for-seniors method in Poland,
+  reviewed the protocol before the first session screen shipped — validating the ladder and mastery
+  rule, and changing five design decisions we folded in.
 
 ---
 

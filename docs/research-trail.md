@@ -133,9 +133,10 @@ The science held across all passes; the *spec* needed pinning down before it was
 
 ## The fourth iteration — practitioner-driven
 
-While the session UI was still on paper, **a practitioner-trainer organisation in the Camp/Brush
-tradition our protocol implements** reviewed the design by email — the first *practitioner-driven*
-pass on top of three literature-driven ones. *(Name and quotes withheld pending consent.)*
+While the session UI was still on paper, **Monika Stroińska of Centrum Montessori Senior — the
+Polish practitioner-trainer organisation in the Camp/Brush tradition our protocol implements** —
+reviewed the design by email — the first *practitioner-driven* pass on top of three
+literature-driven ones. *(Named with her explicit consent, 2026-07-12.)*
 
 **It validated:**
 - the `15s`-then-doubling ladder,

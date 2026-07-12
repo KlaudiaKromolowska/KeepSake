@@ -1,10 +1,9 @@
 # Practitioner feedback — 2026-07-08 (mid-build design input)
 
-**Source:** a practitioner-trainer organisation in the Camp/Brush tradition our protocol
-implements. Received by email in response to our Day-1
-outreach, while Phase 3 (session kiosk UI) was being planned — folded in before a single screen
-was built. *Consultant: Monika Stroińska, Centrum Montessori Senior — named with her explicit
-consent (2026-07-12).*
+**Source:** **Monika Stroińska, Centrum Montessori Senior** — the Polish practitioner-trainer
+organisation in the Camp/Brush tradition our protocol implements (named with her explicit
+consent, 2026-07-12). Received by email in response to our Day-1 outreach, while Phase 3
+(session kiosk UI) was being planned — folded in before a single screen was built.
 
 This is the research trail working as designed: v1→v2→v3 were literature-driven; v4.2 is the
 first **practitioner-driven** iteration.
