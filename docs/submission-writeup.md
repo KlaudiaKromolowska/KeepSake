@@ -74,7 +74,7 @@ The design principle underneath all of it: **the device is the therapist; the ca
 companion.**
 
 *Targets: Demo (the end-to-end emotional arc that the film shows), Impact (working software a
-clinician could deploy without the builder in the room), Claude Use (previews the seven surfaces).*
+clinician could deploy without the builder in the room), Claude Use (previews the nine surfaces).*
 
 ---
 
@@ -126,17 +126,30 @@ never trusted.
 
 | # | Surface | Model | Why this model / technique |
 |---|---|---|---|
-| 1 | **Target wizard** | `claude-sonnet-5` | Clinical reasoning + **visible self-critique** |
-| 2 | **Vision dual-coding QA** | `claude-sonnet-5` | Native multimodal image reasoning |
-| 3 | **Etiology reasoning** | `claude-sonnet-5` | **Extended thinking, streamed on screen** |
-| 4 | **RCT-in-a-box report** | `claude-sonnet-5` | **Agentic tool-use loop** over real logs |
+| 1 | **RCT-in-a-box report** | `claude-sonnet-5` | **Agentic tool-use loop** — Claude picks & runs its own analyses over real logs |
+| 2 | **Target wizard** | `claude-sonnet-5` | Clinical reasoning + **visible self-critique** |
+| 3 | **Vision dual-coding QA** | `claude-sonnet-5` | Native multimodal image reasoning |
+| 4 | **Etiology reasoning** | `claude-sonnet-5` | **Extended thinking, streamed on screen** |
 | 5 | **Post-session debrief** | `claude-sonnet-5` | Streamed warm private narrative |
 | 6 | **Caregiver coach** | `claude-sonnet-5` | Boundaried copilot + injection-safe |
 | 7 | **Real-time grader** | `claude-haiku-4-5` | Sub-second, accept-biased, fallback-only |
 | 8 | **Distractor prompts** | `claude-haiku-4-5` | Cheap, high-volume personalization |
 | 9 | **Recognition lures** | `claude-haiku-4-5` | Cheap constrained generation, booster-gated |
 
-**1 · The target wizard — clinical reasoning, not templating (`lib/wizard/actions.ts`).** A daughter
+**1 · RCT-in-a-box — the agentic research view (`lib/ai/rct-report.ts`, `rct-tools.ts`). This is the
+one that surprised us.** Claude is **not** handed the trial log. It gets a free-text research question
+and a fixed, hand-written menu of five analysis tools — `get_trial_counts`, `get_interval_progression`,
+`get_retention_at_session_start`, `get_booster_history`, `get_affect_summary` — and a multi-turn
+tool-use loop (`runToolLoop`, `tool_choice: auto`, up to 8 tool calls, `effort: high`) lets it
+**choose which analyses to run**, read the aggregates, and write the study report. The ordered list of
+tools it actually called is surfaced to the user as "how this report was produced" — visible proof of
+agency. Guardrails: a fixed menu, never free-form SQL; each tool is a pure aggregate over data fetched
+once through the RLS user client (that single read is the security boundary); results carry numbers,
+dates, and outcome codes only — never names or ids (data minimization); the **n=1 limitations section
+is required**; and an honesty rule baked into the prompt — *n=1 never settles a field question* — so
+the claim is the instrument and schema at scale.
+
+**2 · The target wizard — clinical reasoning, not templating (`lib/wizard/actions.ts`).** A daughter
 describes the memory in her own words; Sonnet returns one SR-valid target (exact question, stable
 answer, accepted variants, a red-flag split of multi-part/emotional requests, a rationale) *and is
 required by its output schema to reject its own first draft* — the rejected draft and the reason are
@@ -145,14 +158,14 @@ description is nonce-fenced as untrusted DATA. Code-side authoring rules (`rules
 model; a violation triggers **one corrective re-ask** with the exact rule failures handed back; if it
 still fails, the UI offers hand-entry — Claude can never block target creation.
 
-**2 · Vision dual-coding QA (`lib/wizard/vision-actions.ts`).** A genuine multimodal call — an image
+**3 · Vision dual-coding QA (`lib/wizard/vision-actions.ts`).** A genuine multimodal call — an image
 block plus a text block in one user message — judges whether a photo works as a memory cue (one
 clear subject, lighting, low clutter) and returns `good`/`needs_work` with concrete crop advice.
 Works on both a seeded stock photo (path allowlisted, traversal-checked) and a caregiver upload
 (magic-byte validated, stored RLS-confined under `<caregiver_id>/<uuid>`, and deleted if the QA call
 itself fails so no unchecked orphan survives).
 
-**3 · Extended-thinking etiology reasoning (`api/etiology/route.ts`).** Sonnet's **visible
+**4 · Extended-thinking etiology reasoning (`api/etiology/route.ts`).** Sonnet's **visible
 reasoning** is streamed live to the screen — `thinking: { type: "adaptive", display: "summarized" }`
 at high effort — turning invisible clinical judgment into a demo visual ("Lewy body → free recall
 will frustrate → recommend a recognition-format probe"). The streamed reasoning is followed by a
@@ -160,23 +173,9 @@ framed JSON trailer, and a deterministic code-side `reconcile()` guard **always 
 recommendation that contradicts the engine's own etiology→format mapping. This is the one surface
 deliberately allowed to name a condition (it does not extend the wellness-framed shared prompt).
 
-**4 · RCT-in-a-box — the agentic research view (`lib/ai/rct-report.ts`, `rct-tools.ts`).** This is
-the surprising one. Claude is **not** handed the trial log. It is given a free-text research question
-and a fixed, hand-written menu of five analysis tools — `get_trial_counts`,
-`get_interval_progression`, `get_retention_at_session_start`, `get_booster_history`,
-`get_affect_summary` — and a multi-turn tool-use loop (`runToolLoop`, `tool_choice: auto`, up to 8
-tool calls, `effort: high`) lets it **choose which analyses to run**, see the aggregates, and write
-the study report. The ordered list of tools it actually called is surfaced to the user as "how this
-report was produced" — visible proof of agency. Guardrails: the tools are a fixed menu, never
-free-form SQL; each is a pure aggregate over data already fetched once through the RLS user client
-(that single read is the security boundary); tool results carry numbers, dates, and outcome codes
-only — never names or ids (data minimization); and the report's **n=1 limitations section is
-required**. Honesty guardrail baked into the prompt: *n=1 never settles a field question* — the claim
-is the instrument and schema at scale.
-
 **5 · Debrief (`api/debrief/route.ts`).** A short, warm, **private** post-session note streamed as
 raw text — what went well, one pattern, one gentle non-scheduling suggestion. Private on purpose:
-§6 keeps in-the-moment pass/fail away from the caregiver so they never push harder at their parent.
+it keeps in-the-moment pass/fail away from the caregiver so they never push harder at their parent.
 
 **6 · Caregiver coach (`api/coach/route.ts`).** A boundaried copilot with an anti-sycophancy design:
 because the chat is stateless, the *entire* client-supplied transcript — including turns labeled
@@ -186,8 +185,7 @@ into "always reassure." It emits an `escalate` safety flag that raises a crisis 
 footer is always present regardless). LLM sycophancy reinforcing a dementia delusion is a real safety
 constraint, and the guardrail is structural.
 
-**7 · Real-time grader (`lib/session/grade-actions.ts`).** V1 speech assist. A deterministic fuzzy/
-phonetic matcher resolves the easy cases in milliseconds; **Haiku is called only on the ambiguous
+**7 · Real-time grader (`lib/session/grade-actions.ts`).** V1 speech assist. A deterministic fuzzy edit-distance (Levenshtein) matcher resolves the easy cases in milliseconds; **Haiku is called only on the ambiguous
 middle band** — sub-second, `maxTokens: 256`, biased to accept, three-state (`recall`/`miss`/
 `unclear`), and it only ever produces a *suggestion* the caregiver taps to confirm. It never records
 an outcome or moves the ladder. The answer and aliases are re-read server-side and the fuzzy match
@@ -210,6 +208,40 @@ that reshaped it.
 *Targets: Claude Use (25%) — nine purpose-fit surfaces spanning agentic tool-use, extended thinking,
 vision, streaming, structured outputs, prompt caching, and a defense-in-depth prompt-injection
 posture, with the model choice justified per call.*
+
+---
+
+## How we used Claude to build — and judge — Keepsake
+
+Claude isn't only *inside* Keepsake (the coach, the agentic report, the grader). It **built,
+reviewed, audited, and judged** the product — and this very submission.
+
+- **Subagent-driven build.** Keepsake was assembled Claude-Code-**subagent-driven**: parallel Claude
+  agents implemented independent features against the plan, so the whole `packages/core` spine and the
+  nine AI surfaces came together as concurrent workstreams rather than one serial thread.
+- **Adversarial review-and-fix loop on every PR.** Each pull request went through a **Claude
+  code-review agent tasked to be adversarial** — hunt bugs, RLS gaps, injection holes — followed by a
+  fix pass before merge. Review was a gate, not a courtesy.
+- **A fidelity-audit agent that caught real drift.** A dedicated Claude agent checked the *actual
+  implementation* against the practitioner's written feedback and the evidence base — and caught a
+  genuine regression: **rigid scheduling copy had crept back into the UI**, exactly the thing the
+  practitioner flagged as instrumentalizing the person. It was removed. The audit did what a code
+  linter can't: enforce a *clinical* guideline against shipped strings.
+- **A security-audit agent.** A separate Claude pass audited the prompt-injection / untrusted-input
+  posture across every AI surface — wizard, grader, coach, vision, report — pressure-testing the
+  fencing, transcript-as-DATA, and server-side re-check defenses documented above.
+- **The submission judged by Claude — against the rubric.** Most distinctively: this writeup and the
+  film script were handed to a Claude model **role-played as a demanding hackathon judge**, scored
+  against the actual rubric, and **iterated twice against its scorecard** — writeup and script each
+  climbing several points across the passes (80→84, 82→85). The judge's own critiques drove
+  the revisions.
+
+The through-line: Claude was the builder, the reviewer, the clinical-fidelity auditor, the security
+auditor, and the judge — a multi-agent process wrapped around a product whose most distinctive
+features are themselves agentic.
+
+*Targets: Claude Use (25%) — the multi-agent build itself, which the rubric explicitly rewards:
+Claude used to build, review, audit, and judge the product and its own submission.*
 
 ---
 
@@ -268,7 +300,7 @@ written accordingly.
 - **RLS is the security boundary, on every table** — `sessions`, `trials`, `target_state`, `consent`
   and the rest have no `caregiver_id` of their own, so each policy joins ownership up through
   `patients`. Forgetting one would be a cross-tenant read of Article 9 data.
-- **A CI-enforced cross-tenant denial test** (`packages/db-tests/src/rls-denial.test.ts`, 89 cases)
+- **A CI-enforced cross-tenant denial test** (`packages/db-tests/src/rls-denial.test.ts`, 89 passing tests)
   proves, for
   every table in the migrations: (1) a caregiver can read/write their **own** data (positive control,
   so the test can't pass vacuously), (2) a caregiver can **never** read, insert, update, or delete
@@ -325,6 +357,11 @@ could actually be piloted with real dyads under EU rules).*
 
 - **The engine is a genuinely pure, property-tested clinical state machine** — the correctness spine
   a memory-practice tool has to earn, not fake.
+- **Validated in-silico on n=1000 simulated patients** (`scripts/simulate.ts`; median time-to-
+  mastery ~24 days among targets that reach mastery within the 90-day simulation horizon) — a
+  sanity-check that the engine's dynamics behave sensibly, run against a
+  deliberately illustrative, *uncalibrated* memory model. It is **not** evidence about real-patient
+  recall.
 - **RCT-in-a-box actually runs.** Claude chooses and executes its own analyses over real logs and
   writes an honest n=1 study report — a working pipeline, not a mockup, that degrades gracefully to
   fixtures for the film.
@@ -361,9 +398,9 @@ could actually be piloted with real dyads under EU rules).*
   vs. a clinician bootstrap), the real adherence curve, caregiver burden (Zarit) and sense of
   competence, relationship quality, patient affect around sessions, and item retention with/without
   boosters. Plus DPIA + dual-consent + Polish counsel sign-off before anyone is enrolled.
-- **Speech assist, for real** — constrained phrase-hint ASR → fuzzy match → Haiku on the ambiguous
-  band, three-state and biased to accept (a false "you're wrong" to a vulnerable patient is a harm,
-  not a bug).
+- **Speech assist, for real** — the fuzzy-match + Haiku ambiguous-band grader already ships; what's
+  next is live constrained phrase-hint ASR (microphone capture) feeding it — three-state and biased
+  to accept (a false "you're wrong" to a vulnerable patient is a harm, not a bug).
 - **Etiology-adaptive protocols, a self-referenced trend view** ("discuss with your doctor," show the
   data never the diagnosis), a read-only clinician view, and CSV research export.
 - **The engine generalizes** — any clinician-designed home protocol with scheduled probes + outcomes
