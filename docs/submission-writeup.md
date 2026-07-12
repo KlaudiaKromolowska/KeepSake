@@ -241,8 +241,9 @@ Keepsake's design is not our first idea; it's the idea evidence-tested. The full
   from large errors); Lewy/Parkinson's prefers recognition-format probes. The deterministic engine
   owns the protocol; the science only tunes parameters; nothing is marketed as clinically proven.
 
-**Mid-build practitioner validation.** While the session UI was still being planned, a **Polish
-practitioner-trainer organisation that officially represents the SR adaptation for seniors** (the same
+**Mid-build practitioner validation.** While the session UI was still being planned, **Monika
+Stroińska of Centrum Montessori Senior — the Polish practitioner-trainer organisation that
+officially represents the SR adaptation for seniors** (the same
 Camp/Brush tradition our protocol implements) reviewed the design by email — the first
 *practitioner-driven* iteration on top of three literature-driven ones. It **validated** the 15s-then-
 doubling ladder, the "3 consecutive session-starts = remembered, regardless of gap" mastery rule, and
@@ -250,7 +251,7 @@ the radical-simplicity accessibility floors — and it **changed** five things w
 single screen shipped: no rigid scheduling copy (real cadence drifts; rigid reminders instrumentalize
 the person), the caregiver always sees question *and* answer, a manual mid-session interval override
 (logged as a protocol-deviation annotation — deviations become data), a per-session caregiver note,
-and an "answer card introduced" annotation. *(Name and quotes withheld pending consent.)*
+and an "answer card introduced" annotation. *(Named with her explicit consent, 2026-07-12.)*
 
 *Targets: Depth & Execution (20%) — a documented v1→v2→v3→v4 where evidence forced us to drop two
 central design choices — and Impact (real practitioner credibility).*
@@ -332,8 +333,8 @@ could actually be piloted with real dyads under EU rules).*
   and a real prompt-injection posture.
 - **A cross-tenant RLS denial test in CI** over every table — Article 9 data treated like Article 9
   data.
-- **Mid-build validation from a real SR practitioner organisation**, folded in before the first
-  session screen shipped.
+- **Mid-build validation from Monika Stroińska (Centrum Montessori Senior)**, folded in before the
+  first session screen shipped.
 - **The device-delivers-the-correction insight** — the caregiver never touches a stopwatch, never has
   to correct their own mother, and never sees a red X.
 

@@ -4,7 +4,8 @@
 adaptation for seniors with cognitive disability (Montessori Senior lineage — the same
 Camp/Brush tradition our protocol implements). Received by email in response to our Day-1
 outreach, while Phase 3 (session kiosk UI) was being planned — folded in before a single screen
-was built. *Name and quotes withheld pending consent; see the outreach log.*
+was built. *Consultant: Monika Stroińska, Centrum Montessori Senior — named with her explicit
+consent (2026-07-12).*
 
 This is the research trail working as designed: v1→v2→v3 were literature-driven; v4.2 is the
 first **practitioner-driven** iteration.
