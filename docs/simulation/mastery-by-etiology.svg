@@ -4,44 +4,44 @@
     <text x="56" y="24" font-size="16" font-weight="600" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">Mastery rate by etiology (of candidacy-screen passers)</text>
     <text x="56" y="40" font-size="13" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">Fraction of synthetic patients who mastered the target within the 90-day horizon</text>
     <line x1="56" y1="64" x2="696" y2="64" stroke="#e5e7eb" stroke-width="1"/>
-      <text x="48" y="68" text-anchor="end" font-size="11" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">76</text>
+      <text x="48" y="68" text-anchor="end" font-size="11" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">74</text>
 <line x1="56" y1="130" x2="696" y2="130" stroke="#e5e7eb" stroke-width="1"/>
-      <text x="48" y="134" text-anchor="end" font-size="11" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">57</text>
+      <text x="48" y="134" text-anchor="end" font-size="11" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">55.5</text>
 <line x1="56" y1="196" x2="696" y2="196" stroke="#e5e7eb" stroke-width="1"/>
-      <text x="48" y="200" text-anchor="end" font-size="11" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">38</text>
+      <text x="48" y="200" text-anchor="end" font-size="11" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">37</text>
 <line x1="56" y1="262" x2="696" y2="262" stroke="#e5e7eb" stroke-width="1"/>
-      <text x="48" y="266" text-anchor="end" font-size="11" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">19</text>
+      <text x="48" y="266" text-anchor="end" font-size="11" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">18.5</text>
 <line x1="56" y1="328" x2="696" y2="328" stroke="#e5e7eb" stroke-width="1"/>
       <text x="48" y="332" text-anchor="end" font-size="11" fill="#6b7280" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">0</text>
     <line x1="56" y1="328" x2="696" y2="328" stroke="#9ca3af" stroke-width="1"/>
     <g>
-        <rect x="56" y="116.10526315789471" width="98.33333333333333" height="211.8947368421053" fill="#0891b2" rx="2"/>
-        <text x="105.16666666666666" y="110.10526315789471" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">61%</text>
+        <rect x="56" y="117.51351351351352" width="98.33333333333333" height="210.48648648648648" fill="#0891b2" rx="2"/>
+        <text x="105.16666666666666" y="111.51351351351352" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">59%</text>
         <text x="105.16666666666666" y="348" text-anchor="middle" font-size="11" fill="#374151" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">alzheimers</text>
       </g>
 <g>
         <rect x="164.33333333333331" y="64" width="98.33333333333333" height="264" fill="#0891b2" rx="2"/>
-        <text x="213.49999999999997" y="58" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">76%</text>
+        <text x="213.49999999999997" y="58" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">74%</text>
         <text x="213.49999999999997" y="348" text-anchor="middle" font-size="11" fill="#374151" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">lewy</text>
       </g>
 <g>
-        <rect x="272.66666666666663" y="123.05263157894737" width="98.33333333333333" height="204.94736842105263" fill="#0891b2" rx="2"/>
-        <text x="321.8333333333333" y="117.05263157894737" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">59%</text>
+        <rect x="272.66666666666663" y="196" width="98.33333333333333" height="132" fill="#0891b2" rx="2"/>
+        <text x="321.8333333333333" y="190" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">37%</text>
         <text x="321.8333333333333" y="348" text-anchor="middle" font-size="11" fill="#374151" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">mixed</text>
       </g>
 <g>
-        <rect x="381" y="70.9473684210526" width="98.33333333333333" height="257.0526315789474" fill="#0891b2" rx="2"/>
-        <text x="430.1666666666667" y="64.9473684210526" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">74%</text>
+        <rect x="381" y="103.24324324324326" width="98.33333333333333" height="224.75675675675674" fill="#0891b2" rx="2"/>
+        <text x="430.1666666666667" y="97.24324324324326" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">63%</text>
         <text x="430.1666666666667" y="348" text-anchor="middle" font-size="11" fill="#374151" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">parkinsons</text>
       </g>
 <g>
-        <rect x="489.3333333333333" y="175.1578947368421" width="98.33333333333333" height="152.8421052631579" fill="#0891b2" rx="2"/>
-        <text x="538.5" y="169.1578947368421" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">44%</text>
+        <rect x="489.3333333333333" y="128.2162162162162" width="98.33333333333333" height="199.7837837837838" fill="#0891b2" rx="2"/>
+        <text x="538.5" y="122.2162162162162" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">56.0%</text>
         <text x="538.5" y="348" text-anchor="middle" font-size="11" fill="#374151" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">unspecified</text>
       </g>
 <g>
-        <rect x="597.6666666666666" y="119.57894736842104" width="98.33333333333333" height="208.42105263157896" fill="#0891b2" rx="2"/>
-        <text x="646.8333333333333" y="113.57894736842104" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">60%</text>
+        <rect x="597.6666666666666" y="160.32432432432432" width="98.33333333333333" height="167.67567567567568" fill="#0891b2" rx="2"/>
+        <text x="646.8333333333333" y="154.32432432432432" text-anchor="middle" font-size="11" fill="#111827" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">47%</text>
         <text x="646.8333333333333" y="348" text-anchor="middle" font-size="11" fill="#374151" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">vascular</text>
       </g>
   </svg>
