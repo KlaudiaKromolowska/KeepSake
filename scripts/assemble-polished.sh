@@ -51,6 +51,9 @@ beat() {
   printf "file '%s'\n" "$name.mp4" >> "$SEG/list.txt"; echo "  ok $name (${d}s)"
 }
 
+# Silent cold-open stat card (music bed only): WHO fact sheet 2026 — 57M living with dementia,
+# ~10M new cases/yr (ADI: one every ~3 seconds). The 7s "narration" is generated silence.
+beat 00-scale      "IMG:$SLIDE/scale.png"          "$NAR/00-scale-silence.mp3"
 beat 01-hook       "VID:$SOFT/01-hook-a.mp4"       "$NAR/01-hook.mp3"
 beat 02-problem    "VID:$SOFT/03-problem.mp4"      "$NAR/02-problem.mp3"
 beat 03-strain     "VID:$SOFT/04-strain.mp4"       "$NAR/03-strain.mp3"

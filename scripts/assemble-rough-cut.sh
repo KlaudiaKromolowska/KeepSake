@@ -42,6 +42,7 @@ beat() {
   printf "file '%s'\n" "$name.mp4" >> "$SEG/list.txt"; echo "  ok $name (${d}s)"  # basename: concat list resolves relative to itself
 }
 
+beat 00-scale      "IMG:$CAP/canva-slides/scale.png" "$NAR/00-scale-silence.mp3"
 beat 01-hook       "$SOFT/01-hook-a.mp4"  "$NAR/01-hook.mp3"
 beat 02-problem    "$SOFT/03-problem.mp4" "$NAR/02-problem.mp3"
 beat 03-strain     "$SOFT/04-strain.mp4"  "$NAR/03-strain.mp3"
